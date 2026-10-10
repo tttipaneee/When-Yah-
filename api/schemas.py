@@ -68,5 +68,5 @@ class Event(BaseModel):
     lat: float
     lon: float
     start: datetime
-    end: datetime
+    end: datetime | None = None  # null when no source publishes an end time
     source_url: str

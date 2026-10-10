@@ -14,7 +14,8 @@ def load_events() -> list[Event]:
     if not CSV_PATH.exists():
         return []
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
-        return [Event(**row) for row in csv.DictReader(f) if row.get("source_url")]
+        return [Event(**{**row, "end": row.get("end") or None})
+                for row in csv.DictReader(f) if row.get("source_url")]
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -26,7 +27,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def events_on(day: date, lat: float | None = None, lon: float | None = None) -> list[Event]:
     """Events on `day` (local date); if a pickup is given, only those within NEARBY_KM."""
-    out = [e for e in load_events() if e.start.date() <= day <= e.end.date()]
+    out = [e for e in load_events() if e.start.date() <= day <= (e.end or e.start).date()]
     if lat is not None and lon is not None:
         out = [e for e in out if haversine_km(lat, lon, e.lat, e.lon) <= NEARBY_KM]
     return sorted(out, key=lambda e: e.start)

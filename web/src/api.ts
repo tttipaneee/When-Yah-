@@ -33,7 +33,7 @@ export interface ForecastResponse {
 }
 export interface EventItem {
   id: string; name: string; venue: string; lat: number; lon: number
-  start: string; end: string; source_url: string
+  start: string; end: string | null; source_url: string
 }
 
 export async function postForecast(body: ForecastRequest): Promise<ForecastResponse> {

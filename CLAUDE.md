@@ -46,7 +46,7 @@ Fill in as they're created; keep them working.
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
 
 ## API contract (shared by frontend and backend)
-- `GET /api/events?date=YYYY-MM-DD` → `[{id, name, venue, lat, lon, start, end, source_url}]`
+- `GET /api/events?date=YYYY-MM-DD` → `[{id, name, venue, lat, lon, start, end, source_url}]` (`end` is `null` when no source publishes it)
 - `POST /api/forecast` body
   `{datetime, rain: bool, pickup: {lat, lon} | null, quotes: [{app, price_rm}], usual_price_rm: number | null}` →
 ```json
