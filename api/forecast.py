@@ -115,6 +115,10 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     if variant == "with_level":
         clipped = " (clipped to the training range)" if not LEVEL_RANGE[0] <= level <= LEVEL_RANGE[1] else ""
         reasons.append(f"Your quote is {level - 1:+.0%} vs your usual price{clipped}")
+        if level >= 1.2:  # "Kenapa mahal?" — see reports/traffic_experiment.md
+            reasons.append(f"Kenapa mahal? Your price is {level:.1f}x your usual. Time of day, weather and traffic "
+                           "explain very little of a high price in our tests; the rest is demand and driver "
+                           "numbers that only the app can see")
     elif variant == "no_level":
         reasons.append("No usual price given: the model can't tell if this price is already high, "
                        "so it only advises waiting when time-of-day patterns are clear")

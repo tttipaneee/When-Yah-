@@ -62,3 +62,15 @@ def test_wait_odds_headline():
     assert d["reasons"][0].startswith("Chance that waiting 30 min saves you 10% or more")
     d = client.post("/api/forecast", json={**BODY, "quotes": []}).json()
     assert d["wait_odds"]["rm_range"] == {}
+
+
+def test_demo_scenarios_run_real_forecast():
+    r = client.get("/api/demo")
+    assert r.status_code == 200
+    d = r.json()
+    assert len(d) == 4 and all(s["label"].startswith("contoh") for s in d)
+    for s in d:
+        assert s["response"]["model_version"].startswith("lgbm_v1/")
+        assert set(s["response"]["wait_odds"]["rm_range"]) == {q["app"] for q in s["request"]["quotes"]}
+    near = {s["id"]: [e["name"] for e in s["response"]["events"]] for s in d}
+    assert any("MAMAMOO" in n for n in near["mamamoo"]) and any("Eunji" in n for n in near["eunji_rain"])
