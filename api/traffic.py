@@ -53,3 +53,20 @@ def predicted_minutes(a: tuple[float, float], b: tuple[float, float], start: dat
     mins = _cached(a, b, start.isoformat(), key)
     out = {m: round(v, 1) for m, v in zip(DEPARTURES, mins) if v}
     return out if 0 in out and len(out) > 1 else None
+
+
+def route_with_traffic(a: tuple[float, float], b: tuple[float, float], depart: datetime | None = None,
+                       timeout: float = 8) -> tuple[float, float] | None:
+    """(km, traffic-aware minutes) from TomTom for one departure (None = now). None without key / on error."""
+    key = os.getenv("TOMTOM_API_KEY")
+    if not key:
+        return None
+    q = {"key": key, "traffic": "true", "travelMode": "car", "routeType": "fastest",
+         "departAt": "now" if depart is None else depart.isoformat(timespec="seconds")}
+    url = URL.format(a_lat=a[0], a_lon=a[1], b_lat=b[0], b_lon=b[1]) + "?" + urllib.parse.urlencode(q)
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            sm = json.load(r)["routes"][0]["summary"]
+        return sm["lengthInMeters"] / 1000, sm["travelTimeInSeconds"] / 60
+    except Exception:
+        return None

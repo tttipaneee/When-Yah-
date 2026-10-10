@@ -92,7 +92,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     req = req.model_copy(update={"datetime": dt})
     est = None
     if req.pickup and req.dropoff:
-        est = fare_estimate((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon))
+        est = fare_estimate((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon), req.datetime)
         if est and req.usual_price_rm is None:  # a typed usual price always wins
             req = req.model_copy(update={"usual_price_rm": est["rm"]})
     quotes = {q.app: q.price_rm for q in req.quotes}  # last quote per app wins
