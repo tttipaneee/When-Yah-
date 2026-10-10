@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
 
 from ml.features import HORIZONS
-from ml.train import MIN_WAIT_P, MODEL, base_rates, drop_prob, load_frame, odds_multiples, tunggu
+from ml.train import K_GRID, MIN_WAIT_P, MODEL, base_rates, drop_prob, load_frame, odds_multiples, tunggu
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.md"
@@ -251,12 +251,19 @@ def main() -> None:
     L += ["", "**Disclosure.** The gate for showing \"Wait\" was changed on 10 Oct 2026 after we saw test "
           "results. The original gate required beating both \"book now\" and the hour-of-day rule; the rule failed "
           "it. The new gate (beat \"book now\" only) was chosen with knowledge of the test numbers, so treat the "
-          "\"Wait\" result as exploratory. k is sensitive: calibrating on Aug 22–23 and choosing k on Aug 24–25 "
-          "picks k = 1.5 instead of 1.25 (test saving +0.19% instead of +0.22%).", "",
-          "**Disclosure (2).** On 10 Oct 2026 we added a product rule: never say \"Wait\" while the expected price at "
-          "that horizon is at or above the price now (the app had shown \"Wait\" next to a rising forecast line). "
-          "It was added for consistency of the advice, not tuned on test numbers; k was re-picked on val days and the "
-          "test numbers above are re-run with the rule."]
+          "\"Wait\" result as exploratory.", "",
+          "**Other changes made after seeing test results (10 Oct 2026).** (1) The 20% minimum chance of a ≥ 10% "
+          "drop before saying \"Wait\" (product rule; re-scored on the same test days). (2) Never \"Wait\" while the "
+          "expected price at that horizon is not below the price now (the app had shown \"Wait\" next to a rising "
+          "forecast line); not tuned on test numbers; included in the numbers above. Each change re-used the same "
+          "test days (Aug 26–31), so the \"Wait\" numbers are exploratory, not a clean held-out result.", "",
+          "**k picked on val:** " + ", ".join(f"{v} = {b['wait_k'][v]}" for v in preds)
+          + (f". This is the lowest value tried ({K_GRID[0]}), so the odds-multiple test never blocks a \"Wait\"; "
+             f"the {MIN_WAIT_P:.0%} minimum does the work." if all(b["wait_k"][v] == K_GRID[0] for v in preds) else "."),
+          "",
+          "**Level in training vs in the app.** In training, level = trip fare ÷ expected fare for its distance and "
+          "duration (fit on train days). In the app, level = the user's quote ÷ the usual price they type. Similar in "
+          "spirit, not the same quantity."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}
                   for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]

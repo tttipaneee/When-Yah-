@@ -113,7 +113,8 @@ source (model metrics, user input, cited event page).
 
 ## 10. Risks
 1. **Realised (10 Oct):** after removing a noise leak found by the leakage audit, the model does not beat
-   the hour-of-day baseline on savings (+0.03% vs +0.29%); P(drop) AUC ≈ 0.59, well calibrated. Extra
+   the hour-of-day baseline on savings (served "Wait" rule +0.20% vs +0.29%, `reports/decision.json`); P(drop)
+   AUC ≈ 0.59, well calibrated. Extra
    inputs tested and rejected: second quote/trend (`reports/trend_experiment.md`), borough averaging
    (`reports/borough_experiment.md`, AUC 0.88 on 23 events but no savings gain), traffic and "why is it
    high" (`reports/traffic_experiment.md`). The "Wait" rule beats book-now but only ties the hour-of-day

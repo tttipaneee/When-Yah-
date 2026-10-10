@@ -38,10 +38,13 @@ The headline is **the chance that waiting 30 min gets a price ≥ 10% lower**, n
 | Ranking good vs bad moments | ROC-AUC 0.589 (0.5 = coin flip) | `reports/metrics.md` §2 |
 | "Wait" rule beats "book now"? | **Yes** — +0.20% overall; when it says wait (≥ 20% chance of a ≥10% drop) it saves 2.3% on average; ~4 in 10 waits still cost more | `reports/decision.json` |
 | …and beats the hour-of-day rule? | **No** — the hour-of-day rule saves slightly more (+0.29% vs +0.20%) | `reports/decision.json` |
-| When price ≥ 1.5× usual? | Waiting saved ~4.5%, but high prices fall back anyway (time-of-day rule +5.1%, always wait 30 min +4.1%) | `reports/decision.json` |
+| When price ≥ 1.5× usual? | Waiting saved ~4.3%, but high prices fall back anyway (time-of-day rule +5.1%, always wait 30 min +4.1%) | `reports/decision.json` |
 
 Disclosure: the gate for showing "Wait" was changed on 10 Oct 2026 after we saw test results (originally it had
-to beat both baselines and failed); treat the "Wait" result as exploratory.
+to beat both baselines and failed); so were the 20% minimum and a guard that never says "Wait" next to a
+rising forecast line. The guard is **untested on held-out days** (we chose not to re-score the same test days a
+fifth time) and no saving is claimed for it. k picked on val = 1.0, the lowest value tried, so the 20% minimum
+does the work. Treat the "Wait" result as exploratory. Full list: `reports/metrics.md`, end.
 
 So the app says **"Wait X min"** when the odds are clearly above usual, otherwise **book now**, and always
 shows how often waiting still cost more in tests.

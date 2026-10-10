@@ -197,7 +197,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         pass  # the traffic reason explains the book-now
     elif odds_high and not falling:
         reasons.append(f"Book now: the chance of a ≥10% drop by +{best.minutes} min is {best.p_drop10:.0%}, but the "
-                       f"expected price then is {best.pct_change:+.0%} — not lower than now")
+                       f"expected price then is {best.pct_change:+.0%} — not lower than now (product rule; "
+                       "not tested on held-out days)")
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
