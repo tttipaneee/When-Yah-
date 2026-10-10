@@ -15,6 +15,16 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 
 URL = "https://api.tomtom.com/routing/1/calculateRoute/{a_lat},{a_lon}:{b_lat},{b_lon}/json"
+_ENV = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+
+
+def _tomtom_key() -> str | None:
+    """TOMTOM_API_KEY from the environment or the project .env (so scripts like ml.fare_check find it too)."""
+    if not os.getenv("TOMTOM_API_KEY") and os.path.exists(_ENV):
+        for line in open(_ENV, encoding="utf-8"):
+            if line.strip().startswith("TOMTOM_API_KEY=") and "=" in line:
+                os.environ["TOMTOM_API_KEY"] = line.split("=", 1)[1].strip().strip('"').strip("'")
+    return os.getenv("TOMTOM_API_KEY") or None
 DEPARTURES = (0, 15, 30, 45, 60)
 
 
@@ -45,7 +55,7 @@ def _cached(a: tuple[float, float], b: tuple[float, float], start_iso: str, key:
 
 def predicted_minutes(a: tuple[float, float], b: tuple[float, float], start: datetime) -> dict[int, float] | None:
     """{minutes_from_now: predicted trip minutes} or None (no key / no answer)."""
-    key = os.getenv("TOMTOM_API_KEY")
+    key = _tomtom_key()
     if not key:
         return None
     start = start.replace(second=0, microsecond=0)  # cache per minute
@@ -58,7 +68,7 @@ def predicted_minutes(a: tuple[float, float], b: tuple[float, float], start: dat
 def route_with_traffic(a: tuple[float, float], b: tuple[float, float], depart: datetime | None = None,
                        timeout: float = 8) -> tuple[float, float] | None:
     """(km, traffic-aware minutes) from TomTom for one departure (None = now). None without key / on error."""
-    key = os.getenv("TOMTOM_API_KEY")
+    key = _tomtom_key()
     if not key:
         return None
     q = {"key": key, "traffic": "true", "travelMode": "car", "routeType": "fastest",

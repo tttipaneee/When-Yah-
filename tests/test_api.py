@@ -143,8 +143,10 @@ def test_tomtom_traffic_used_when_pickup_and_dropoff(monkeypatch):
 
 
 def test_no_tomtom_key_means_no_traffic(monkeypatch):
+    import api.traffic as tr
     from api.traffic import predicted_minutes
     monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
+    monkeypatch.setattr(tr, "_ENV", "/nonexistent/.env")
     assert predicted_minutes((3.158, 101.7117), (3.1177, 101.6774), __import__("datetime").datetime.now()) is None
 
 
