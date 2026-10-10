@@ -33,13 +33,11 @@ export default function App() {
   var NEAR_KM=5;   // "event in the area": product choice, information only
   var HERE_KM=1;   // "event right here": ~ the venue's own taxi zone where NYC data measured post-event effects
   // Example event zone for the design prototype (hidden screens); no numbers — real events come from /api/events
-  var EVENT={at:"Axiata Arena",r:46,name:"",source:""};
   var fsOpener=null,resOpener=null,zoneOpener=null,zoneBox=null;
   var state={from:"Axiata Arena",to:"KL Sentral",active:"from",prevFrom:null,
     quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null,toLatLon:null};
 
   function $(id){return document.getElementById(id)}
-  function place(n){for(var i=0;i<PLACES.length;i++)if(PLACES[i].n===n)return PLACES[i];return PLACES[0]}
   function rm(v){return "RM"+v.toFixed(2)}
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 
@@ -63,76 +61,6 @@ export default function App() {
     }
   }
 
-  function baseMap(){
-    var h="",y;
-    for(y=-280;y<480;y+=56){h+='M-60 '+y+'H400';}
-    var h2="";
-    for(y=-240;y<480;y+=64){h2+='M-60 '+y+'H400';}
-    return '<rect x="-200" y="-500" width="800" height="1200" fill="var(--map-bg)"/>'+
-    '<path d="M-200 140 C60 130 90 162 160 148 S290 124 600 138 L600 164 C290 150 220 174 160 172 S50 156 -200 166Z" fill="var(--map-water)"/>'+
-    '<rect x="150" y="12" width="46" height="34" rx="10" fill="var(--map-park)"/>'+
-    '<rect x="8" y="64" width="38" height="24" rx="10" fill="var(--map-park)"/>'+
-    '<rect x="270" y="86" width="52" height="30" rx="12" fill="var(--map-park)"/>'+
-    '<rect x="60" y="-150" width="70" height="46" rx="14" fill="var(--map-park)"/>'+
-    '<rect x="220" y="230" width="64" height="50" rx="14" fill="var(--map-park)"/>'+
-    '<rect x="20" y="300" width="80" height="40" rx="14" fill="var(--map-park)"/>'+
-    '<g stroke="#fff" stroke-width="7" stroke-linecap="round" fill="none">'+
-      '<path d="'+h+'"/>'+
-      '<path d="M40 -400V600M130 -400V600M215 -400V600M296 -400V600"/>'+
-      '<path d="M-40 200L120 70 400 -10" stroke-width="5"/>'+
-    '</g>'+
-    '<g stroke="#EEF8DD" stroke-width="3" fill="none"><path d="'+h2+'"/><path d="M86 -400V600M172 -400V600M255 -400V600"/></g>';
-  }
-  function pinMarkup(p,kind,label,k){
-    k=k||1;
-    var r=9*k,sw=3.5*k,lx=p.x>230?p.x-8*k-3:p.x+12*k,anchor=p.x>230?"end":"start";
-    var shape=kind==="from"
-      ?'<circle cx="'+p.x+'" cy="'+p.y+'" r="'+r+'" fill="#C4F135" stroke="#101410" stroke-width="'+sw+'"/><circle cx="'+p.x+'" cy="'+p.y+'" r="'+(2.8*k)+'" fill="#101410"/>'
-      :kind==="walk"
-      ?'<circle cx="'+p.x+'" cy="'+p.y+'" r="'+(7*k)+'" fill="#fff" stroke="#101410" stroke-width="'+(3*k)+'"/>'
-      :'<rect x="'+(p.x-r)+'" y="'+(p.y-r)+'" width="'+(2*r)+'" height="'+(2*r)+'" rx="'+(5*k)+'" fill="#101410" stroke="#C4F135" stroke-width="'+sw+'"/><rect x="'+(p.x-3*k)+'" y="'+(p.y-3*k)+'" width="'+(6*k)+'" height="'+(6*k)+'" rx="'+(1.5*k)+'" fill="#C4F135"/>';
-    if(!label)return shape;
-    return shape+'<text x="'+lx+'" y="'+(p.y+4*k)+'" text-anchor="'+anchor+'" font-family="Plus Jakarta Sans,system-ui,sans-serif" font-size="'+(10.5*k)+'" font-weight="800" fill="#101410" stroke="#F5FBEA" stroke-width="'+(3.5*k)+'" paint-order="stroke" stroke-linejoin="round">'+esc(label)+'</text>';
-  }
-  var FONT='font-family="Plus Jakarta Sans,system-ui,sans-serif"';
-  function zoneMarkup(label,k,o){
-    k=k||1;o=o||{};
-    var v=place(EVENT.at),r=EVENT.r;
-    var sh='<circle class="zone-o" cx="'+v.x+'" cy="'+v.y+'" r="'+r+'" fill="#F26B1D" fill-opacity=".2" stroke="#F26B1D" stroke-width="2" stroke-dasharray="7 5" vector-effect="non-scaling-stroke"/>'+
-          '<circle cx="'+v.x+'" cy="'+v.y+'" r="'+(r*.52)+'" fill="#F26B1D" fill-opacity=".28"/>';
-    if(label){
-      var below=!!o.tap;
-      var ly=below?v.y+r+12*k:v.y-r-4*k;
-      sh+='<text x="'+v.x+'" y="'+ly+'" text-anchor="middle" '+FONT+' font-size="'+(9.5*k)+'" font-weight="800" fill="#B8470C" stroke="#F5FBEA" stroke-width="'+(3*k)+'" paint-order="stroke">Surge zone</text>';
-      if(o.tap)sh+='<text x="'+v.x+'" y="'+(ly+11*k)+'" text-anchor="middle" '+FONT+' font-size="'+(8*k)+'" font-weight="700" fill="#B8470C" stroke="#F5FBEA" stroke-width="'+(3*k)+'" paint-order="stroke">Tap for details</text>';
-    }
-    if(o.hit)return '<g class="zone-hit" data-zone="1" role="button" tabindex="0" aria-label="Surge zone around '+esc(EVENT.at)+'. Show event details" style="cursor:pointer">'+sh+'</g>';
-    return sh;
-  }
-  function stationMarker(st,k,label){
-    var s=8*k,o='<rect x="'+(st.x-s/2)+'" y="'+(st.y-s/2)+'" width="'+s+'" height="'+s+'" rx="'+(2.4*k)+'" fill="#101410" stroke="#fff" stroke-width="'+(1.6*k)+'"/>'+
-      '<rect x="'+(st.x-1.8*k)+'" y="'+(st.y-1.8*k)+'" width="'+(3.6*k)+'" height="'+(3.6*k)+'" rx="'+k+'" fill="#C4F135"/>';
-    if(label)o+='<text x="'+(st.x+(st.lx||9)*k)+'" y="'+(st.y+(st.ly||3)*k)+'" text-anchor="'+(st.a||"start")+'" '+FONT+' font-size="'+(8.5*k)+'" font-weight="800" fill="#101410" stroke="#F5FBEA" stroke-width="'+(3*k)+'" paint-order="stroke" stroke-linejoin="round">'+esc(st.n)+'</text>';
-    return o;
-  }
-  function railLine(sts,w){
-    return '<polyline points="'+sts.map(function(p){return p.x+","+p.y}).join(" ")+'" fill="none" stroke="#101410" stroke-width="'+w+'" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>';
-  }
-  function fitBox(pts,pad,asp){
-    var xs=pts.map(function(p){return p.x}),ys=pts.map(function(p){return p.y});
-    var x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs),y0=Math.min.apply(0,ys),y1=Math.max.apply(0,ys);
-    var w=Math.max(x1-x0+2*pad,(y1-y0+2*pad)*asp),h=w/asp,cx=(x0+x1)/2,cy=(y0+y1)/2;
-    return {w:w,h:h,vb:(cx-w/2)+" "+(cy-h/2)+" "+w+" "+h};
-  }
-  function inZone(){
-    var a = PLACE_LATLON[state.from], v = PLACE_LATLON[EVENT.at];
-    if(!a || !v) return false;
-    return Math.hypot(a.lat-v.lat, a.lon-v.lon) <= 0.03;
-  }
-  function routePath(a,b){
-    var ym=(a.y+b.y)/2;
-    return "M"+a.x+" "+a.y+" L"+a.x+" "+ym+" L"+b.x+" "+ym+" L"+b.x+" "+b.y;
-  }
   function drawMain(animate){
     if(!miniLayers) return;
     miniLayers.clearLayers();
@@ -433,21 +361,36 @@ export default function App() {
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
   function realOnly(){
-    // Cards without a traceable source stay hidden until they have one (evidence rule)
-    $("walkCard").hidden=true;$("transitCard").hidden=true;
-    $("opts").querySelectorAll('[data-go="transit"]').forEach(function(n){n.remove()});
-    var wc=$("wt").closest(".card"),tg=wc&&wc.querySelector(".tag");if(tg)tg.hidden=true;
     if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
-    var html=MODEL.reasons.filter(function(t){return !/^Event (right here|in the area|today|nearby)/.test(t)}).map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
+    // reasons → short icon rows; the odds and "Wait" reasons are already on the decision card
+    var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',car:'<path d="M5 16v-5l1.7-4.5A2 2 0 0 1 8.6 5h6.8a2 2 0 0 1 1.9 1.5L19 11v5M5 16h14M5 16v2.5M19 16v2.5"/>',
+      rain:'<path d="M7 15a4 4 0 1 1 1.2-7.8A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/>',
+      tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'};
+    function row(icon,title,text,extra){text=text.charAt(0).toUpperCase()+text.slice(1);return '<div class="wr"><span class="wi">'+ic(I[icon])+'</span><div><b>'+esc(title)+'</b><p>'+esc(text)+'</p>'+(extra||"")+'</div></div>'}
+    var html=MODEL.reasons.map(function(t){
+      if(/^Chance that waiting|^Wait \d+ min:|^Event (right here|in the area|today|nearby)/.test(t))return "";
+      if(/^Book now — jam coming|^Traffic/.test(t))return row("car","Traffic",t.replace(/^Traffic: /,""));
+      if(/^Book now/.test(t))return row("clock","Why book now",t.replace(/^Book now: /,""));
+      if(/^Odds of a drop/.test(t))return row("clock","Why book now",t);
+      if(/^Your quote is/.test(t))return row("tag","Your price",t);
+      if(/^Why so pricey\?/.test(t))return row("tag","Why so pricey?",t.replace(/^Why so pricey\? /,""));
+      if(/^No usual price/.test(t))return row("tag","No usual price",t.replace(/^No usual price given: /,"Without it, "));
+      if(t==="rain"||t==="no rain")return row("rain","Weather",t==="rain"?"Raining (you set Rain on)":"No rain");
+      if(/^Event ending right here: /.test(t))return row("cal","Event ending",t.replace(/^Event ending right here: /,""));
+      return row("info","Note",t);
+    }).join("");
     html+=MODEL.events.map(function(e){
       var lv=e.level==="right_here"?"Event right here":e.level==="in_area"?"Event in the area":"Event today";
-      return '<div><div class="why-top"><span>'+lv+(e.km!=null?' ('+e.km.toFixed(1)+' km)':'')+': '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</div></div>'}).join("");
-    html+='<div class="why-src">Source: '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
+      return row("cal",lv+(e.km!=null?" · "+e.km.toFixed(1)+" km":""),e.name,'<small><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</small>')}).join("");
+    html+='<div class="why-src">Model '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
     $("why").innerHTML=html;
     renderFareReport();
   }
+  var DEFAULT_QUOTES=JSON.stringify(state.quotes);
   function renderPrediction(fromModel){
     if(!fromModel)requestModel();
+    if($("exTag"))$("exTag").hidden=JSON.stringify(state.quotes)!==DEFAULT_QUOTES;  // "Example prices" until you type yours
     renderRadar();  // pickup may have changed
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
@@ -460,58 +403,31 @@ export default function App() {
     $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
       tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Wait \d+ min: /,""))+".":
       "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
-    $("bestAt").textContent=hhmm(bestMin);
+    $("rt").textContent=bestMin===0?"Your apps now":"Your apps: now vs "+hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";
     $("ringArc").style.strokeDashoffset=String(263.9*(1-PDROP));
     var rows=state.quotes.filter(function(q){return q.price>0}).map(function(q){return{app:q.app,now:q.price,later:q.price*mult}});
     rows.sort(function(a,b){return a.later-b.later});
     $("rank").innerHTML=rows.length?rows.map(function(r,i){
       var ini=r.app==="Other app"?"?":r.app.charAt(0).toUpperCase()+(r.app==="GV Ride"?"V":r.app==="inDrive"?"D":"");
-      return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):"Now "+rm(r.now))+'</small></span>'+
+      return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):bestMin===0?rm(r.now-rows[0].now)+" more than "+esc(rows[0].app):"Now "+rm(r.now))+'</small></span>'+
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
-    renderChart();renderWalk();renderTransit();renderOpts();renderWhy();realOnly();
+    renderChart();realOnly();
   }
-  function lowest(){var p=state.quotes.map(function(q){return q.price}).filter(function(v){return v>0});return p.length?Math.min.apply(0,p):0}
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
-  var ICON_WALK='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4.5" r="1.8"/><path d="M9 21l2.5-6-2-2 1-5 3-1 2 4 3 1M12.5 15l3 2.5 .5 3.5M10.5 8L8 11"/></svg>';
-  var TRAIN_PATH='<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14M9 21l2-4M15 21l-2-4"/><circle cx="9" cy="14" r=".7"/><circle cx="15" cy="14" r=".7"/>';
-  var CAR_PATH='<path d="M5 16v-5l1.7-4.5A2 2 0 0 1 8.6 5h6.8a2 2 0 0 1 1.9 1.5L19 11v5M5 16h14M5 16v2.5M19 16v2.5"/><circle cx="8.5" cy="13.2" r=".7"/><circle cx="15.5" cy="13.2" r=".7"/>';
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
-  var ICON_TRAIN=ic(TRAIN_PATH),ICON_CAR=ic(CAR_PATH);
   var ICON_CHECK='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   var ICON_WARN='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B8470C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/></svg>';
 
-  function legendSw(kind){
-    if(kind==="zone")return '<span><i style="background:#FFE6D4;border:2px dashed #F26B1D"></i>Surge zone</span>';
-    if(kind==="walk")return '<span><svg width="18" height="8" viewBox="0 0 18 8" aria-hidden="true" style="margin-right:5px"><path d="M2 4h14" stroke="#101410" stroke-width="3" stroke-dasharray="0.1 5" stroke-linecap="round"/></svg>Walk</span>';
-    if(kind==="train")return '<span><svg width="20" height="8" viewBox="0 0 20 8" aria-hidden="true" style="margin-right:5px"><path d="M1 4h18" stroke="#101410" stroke-width="2.5" stroke-dasharray="5 3" stroke-linecap="round"/></svg>Train</span>';
-    return '<span><svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true" style="margin-right:5px"><path d="M2 5h16" stroke="#C4F135" stroke-width="8" stroke-linecap="round"/><path d="M2 5h16" stroke="#101410" stroke-width="3" stroke-linecap="round"/></svg>Ride</span>';
-  }
 
-  function renderWalk(){$("walkCard").innerHTML=""}  // walk-out card: no sourced data yet (hidden)
 
   /* ---------- ride + train ---------- */
-  function renderTransit(){$("transitCard").innerHTML=""}  // ride + train card: no sourced fares yet (hidden)
 
-  function renderOpts(){
-    var out=[],q=state.quotes.filter(function(x){return x.price>0}).slice().sort(function(a,b){return a.price-b.price});
-    if(q.length>1&&q[0].price<q[q.length-1].price){
-      out.push({t:"Book "+q[0].app+" now",s:"Lowest of your quotes, "+rm(q[q.length-1].price-q[0].price)+" less than "+q[q.length-1].app+".",i:'<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>'});
-    }
-    out.push({t:"Check again in 15 min",s:"Expected "+sg(PCT[15])+"%, likely between "+sg(LO[15])+"% and "+sg(HI[15])+"%.",i:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>'});
-    $("opts").innerHTML=out.map(function(o){
-      var inner='<span class="oi"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+o.i+'</svg></span><span><b>'+esc(o.t)+'</b><small>'+esc(o.s)+'</small></span>';
-      return o.go?'<button type="button" class="opt" data-go="'+o.go+'">'+inner+'</button>':'<div class="opt">'+inner+'</div>';
-    }).join("");
-  }
 
-  function renderWhy(){}  // the "why" list is filled from the model by realOnly()
 
   /* ---------- surge zone sheet ---------- */
-  function mins(t){var p=t.split(":");return (+p[0])*60+(+p[1])}
-  function fmtMin(m){m=((m%1440)+1440)%1440;var h=Math.floor(m/60),n=m%60;return (h<10?"0":"")+h+":"+(n<10?"0":"")+n}
   function pickupLL(){return state.fromLatLon||PLACE_LATLON[state.from]||null}
   function nearEvents(){
     var a=pickupLL();if(!a)return [];
@@ -551,7 +467,7 @@ export default function App() {
   }
   function openZone(opener){
     zoneOpener=opener||document.activeElement;
-    var box=zoneOpener&&zoneOpener.closest?zoneOpener.closest("#walkCard,#transitCard,#bigSvg"):null;
+    var box=zoneOpener&&zoneOpener.closest?zoneOpener.closest("#bigSvg"):null;
     zoneBox=box?box.id:null;
     renderZoneSheet();
     $("zoneScrim").classList.add("on");$("zoneSheet").classList.add("on");$("zoneSheet").setAttribute("aria-hidden","false");
@@ -574,11 +490,6 @@ export default function App() {
 
   /* ---------- forecast screen ---------- */
   function reduced(){return !!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)}
-  function scrollToCard(id){
-    var sc=$("resScroll"),c=$(id);if(!c||c.hidden)return;
-    var top=c.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop-12;
-    sc.scrollTo({top:top,behavior:reduced()?"auto":"smooth"});
-  }
   function openRes(opener){
     resOpener=opener||$("predict");
     setResRoute();
@@ -596,17 +507,6 @@ export default function App() {
   $("closeRes").onclick=function(){closeRes()};
   function setResRoute(){$("resRoute").textContent=state.from+" to "+state.to}
 
-  function zoneKey(e){
-    if(e.key!=="Enter"&&e.key!==" ")return;
-    var z=e.target.closest&&e.target.closest("[data-zone]");
-    if(z){e.preventDefault();openZone(z)}
-  }
-  $("walkCard").addEventListener("keydown",zoneKey);
-  $("transitCard").addEventListener("keydown",zoneKey);
-  $("opts").addEventListener("click",function(e){
-    var b=e.target.closest("button[data-go]");
-    if(b&&b.dataset.go==="transit")scrollToCard("transitCard");
-  });
 
   document.addEventListener("keydown",function(e){
     if(e.key!=="Escape")return;
@@ -801,6 +701,14 @@ export default function App() {
       '<div class="study"><h3>When a jam is coming</h3><p class="sub">With pickup and destination set, we check predicted trip time for leaving now vs in 15–60 min. '+
       'If the trip gets 25% longer, waiting is off: <b>Book now — jam coming</b>. Traffic did not help predict the price itself, so we show minutes, not a %.</p></div>'+
       '<div class="why-src">Measured on real ride-hailing data (2024), test days held out — not measured in Malaysia. Source: reports/case_studies.md</div>';
+    // one moment at a time: tabs instead of one long card
+    var st=el.querySelectorAll(".study"),names=["Event ends","Price high","Jam coming"];
+    var tabs=document.createElement("div");tabs.className="lb-toggle three";tabs.setAttribute("role","tablist");
+    tabs.innerHTML=[].map.call(st,function(s,i){return '<button type="button" role="tab" data-i="'+i+'" aria-selected="'+(i===0)+'">'+names[i]+'</button>'}).join("");
+    el.insertBefore(tabs,el.firstChild);
+    function show(k){[].forEach.call(st,function(s,i){s.hidden=i!==k});[].forEach.call(tabs.children,function(b,i){b.setAttribute("aria-selected",String(i===k))})}
+    tabs.onclick=function(e){var b=e.target.closest("button[data-i]");if(b)show(+b.dataset.i)};
+    show(0);
   }
   initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
@@ -869,12 +777,12 @@ export default function App() {
               <h2 id="qt">Enter the prices you see</h2>
               <p className="sub">Type the price each app shows you right now.</p>
             </div>
-            <span className="tag">Example</span>
+            <span className="tag" id="exTag">Example prices</span>
           </div>
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
           <div className="qrow">
-            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Usual price (optional)" aria-label="Usual price for this trip (optional)" /></div>
+            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Usual price" aria-label="Usual price for this trip (optional)" /></div>
             <label className="ghost"><input id="rain" type="checkbox" /> Rain</label>
           </div>
           <p className="note">Know your usual price for this trip? Add it for a sharper forecast.</p>
@@ -947,7 +855,12 @@ export default function App() {
           </div>
         </section>
 
-        <section className="card" id="walkCard" aria-label="Walk out of the zone"></section>
+        <section className="card" aria-labelledby="rt">
+          <div className="card-head">
+            <div><h2 id="rt">Your apps</h2><p className="sub" id="rtSub">Cheapest first, from the prices you typed.</p></div>
+          </div>
+          <div className="rank" id="rank"></div>
+        </section>
 
         <section className="card" aria-labelledby="ct">
           <div className="card-head">
@@ -960,23 +873,11 @@ export default function App() {
           <div className="legend"><span><i style={{width:"14px",height:"3px",background:"#101410",borderRadius:"2px"}}></i>Expected</span><span><i style={{width:"14px",height:"10px",background:"rgba(196,241,53,.6)",borderRadius:"3px"}}></i>Likely range</span><span><i style={{width:"10px",height:"10px",background:"#C4F135",border:"2px solid #101410",borderRadius:"50%"}}></i>Best time</span></div>
         </section>
 
-        <section className="card" id="transitCard" aria-label="Ride plus train" hidden></section>
-
-        <section aria-label="Other options"><div className="k2" style={{margin: "0 2px 8px"}}>Other options</div><div className="opts" id="opts"></div></section>
-
         <section className="card" aria-labelledby="wt">
           <div className="card-head">
-            <div><h2 id="wt">Why the price may move</h2><p className="sub">What is pushing it down or up in the next 30 minutes.</p></div>
-            <span className="tag">Example</span>
+            <div><h2 id="wt">Why</h2><p className="sub">What the model and live data say for the next hour.</p></div>
           </div>
-          <div className="why-list" id="why"></div>
-        </section>
-
-        <section className="card" aria-labelledby="rt">
-          <div className="card-head">
-            <div><h2 id="rt">Your apps, now vs <span id="bestAt">18:40</span></h2><p className="sub">Cheapest first, based on the prices you typed.</p></div>
-          </div>
-          <div className="rank" id="rank"></div>
+          <div className="why2" id="why"></div>
         </section>
 
         <section className="card" aria-labelledby="ft">
