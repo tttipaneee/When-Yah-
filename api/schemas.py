@@ -77,6 +77,9 @@ class UsualPriceEstimate(BaseModel):
     km: float
     min: float
     source: str
+    validated: bool = True                 # false = rough (reports/fare_check.json failed); still labelled in reasons
+    median_abs_error: float | None = None  # measured in the fare check for this method
+    n_quotes: int | None = None
 
 
 class TrafficInfo(BaseModel):
@@ -116,7 +119,7 @@ class ForecastResponse(BaseModel):
     events: list[ForecastEvent] = []
     reasons: list[str]
     model_version: str
-    usual_price_estimate: UsualPriceEstimate | None = None  # null unless reports/fare_check.json passed
+    usual_price_estimate: UsualPriceEstimate | None = None  # with pickup + dropoff; rough unless fare check passed
     traffic: TrafficInfo | None = None  # only when the request carried traffic_min
     # rule-based labels on the outputs above (no new numbers): what kind of moment this is, and how urgent
     situation: Literal["jam_coming", "event_exit", "surge", "pricey", "rush_hour", "normal"] = "normal"

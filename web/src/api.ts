@@ -42,7 +42,8 @@ export interface ForecastResponse {
   events: ForecastEvent[]
   reasons: string[]
   model_version: string
-  usual_price_estimate: { rm: number; km: number; min: number; source: string } | null
+  usual_price_estimate: { rm: number; km: number; min: number; source: string
+    validated?: boolean; median_abs_error?: number | null; n_quotes?: number | null } | null
   walk_out?: WalkOut | null
   evidence: Record<string, string>
 }

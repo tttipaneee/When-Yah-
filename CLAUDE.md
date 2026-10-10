@@ -88,9 +88,11 @@ Fill in as they're created; keep them working.
 - `GET /api/route?from_lat&from_lon&to_lat&to_lon[&at]` → `{km, minutes, source}` (nulls without a TomTom key): trip time
   with traffic for leaving now (or a future `at`), one TomTom call cached per minute, so the map shows it before any
   forecast; after a forecast for the same route, the forecast's `traffic` is used. Minutes only.
-- Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
-  as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
-  route) and the user typed none; otherwise `usual_price_estimate: null`.
+- Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source, validated,
+  median_abs_error, n_quotes}` (Grab Jan 2023 rates + TomTom route, else OSM route). If the user typed no usual price,
+  it is used as the usual price (product decision, Ravin 11 Oct) — `validated: false` while `reports/fare_check.json`
+  fails, and a reason says "No usual price typed: using an estimated usual price of RM X (… rough: off by N% (median)
+  on M real quotes in our check)". A typed usual price always wins.
 - Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
   are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
   Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now, km} | null` (`km` = TomTom route length for

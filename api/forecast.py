@@ -147,11 +147,12 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # (naive times are taken as KL time), so hour/weekday features and event dates are right.
     dt = req.datetime.astimezone(KL) if req.datetime.tzinfo else req.datetime.replace(tzinfo=KL)
     req = req.model_copy(update={"datetime": dt})
-    est = None
+    est, used_estimate = None, False
     if req.pickup and req.dropoff:
         est = fare_estimate((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon), req.datetime)
-        if est and req.usual_price_rm is None:  # a typed usual price always wins
+        if est and req.usual_price_rm is None:  # a typed usual price always wins; rough estimate is labelled
             req = req.model_copy(update={"usual_price_rm": est["rm"]})
+            used_estimate = True
     quotes = {q.app: q.price_rm for q in req.quotes}  # last quote per app wins
     nearby = events_near(req.datetime, req.pickup.lat if req.pickup else None,
                          req.pickup.lon if req.pickup else None)
@@ -241,7 +242,14 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                        f"mainly because {' and '.join(because)} (main reasons in the model)")
     if variant == "with_level":
         clipped = " (clipped to the training range)" if not LEVEL_RANGE[0] <= level <= LEVEL_RANGE[1] else ""
-        reasons.append(f"Your quote is {level - 1:+.0%} vs your usual price{clipped}")
+        if used_estimate:
+            rough = "" if est["validated"] else (
+                f" — rough: off by {est['median_abs_error']:.0%} (median) on {est['n_quotes']} real quotes in our check"
+                if est.get("median_abs_error") is not None else " — rough, not checked against real quotes")
+            reasons.append(f"No usual price typed: using an estimated usual price of RM {est['rm']:.2f} (Grab published "
+                           f"rates + route{rough}). Type your usual price for a better forecast")
+        reasons.append(f"Your quote is {level - 1:+.0%} vs {'the estimated' if used_estimate else 'your'} usual price"
+                       f"{clipped}")
         if level >= 1.2:  # "Why so pricey?" — see reports/traffic_experiment.md
             reasons.append(f"Why so pricey? Your price is {level:.1f}x your usual. Time of day, weather and traffic "
                            "explain very little of a high price in our tests; the rest is demand and driver "

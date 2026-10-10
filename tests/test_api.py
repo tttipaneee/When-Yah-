@@ -83,12 +83,19 @@ def test_time_is_read_in_kl_whatever_timezone_was_sent():
     assert utc["datetime"].endswith("+08:00")
 
 
-def test_usual_price_estimate_only_when_fare_check_passed():
-    from api.fare import check
+def test_rough_estimate_used_only_without_typed_usual_and_labelled(monkeypatch):
+    import api.forecast as fc
+    est = {"rm": 20.0, "km": 8.0, "min": 18, "source": "Grab published rates (Jan 2023) + OpenStreetMap route — rough",
+           "validated": False, "median_abs_error": 0.371, "n_quotes": 9}
+    monkeypatch.setattr(fc, "fare_estimate", lambda *a, **k: est)
     body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
     d = client.post("/api/forecast", json=body).json()
-    if not check().get("passed"):
-        assert d["usual_price_estimate"] is None and d["model_version"].startswith("lgbm_v1/no_level")
+    assert d["model_version"].startswith("lgbm_v1/with_level") and d["usual_price_estimate"]["validated"] is False
+    assert any(r.startswith("No usual price typed: using an estimated usual price of RM 20.00") and "37%" in r
+               for r in d["reasons"])
+    typed = client.post("/api/forecast", json={**body, "usual_price_rm": 30.0}).json()  # typed always wins
+    assert not any(r.startswith("No usual price typed") for r in typed["reasons"])
+    assert any("vs your usual price" in r for r in typed["reasons"])
 
 
 def test_metrics_structured_for_judges_screen():
