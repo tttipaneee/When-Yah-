@@ -216,7 +216,7 @@ export default function App() {
       L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
     }
     if(v) {
-      L.circle([v.lat, v.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.15, weight: 1, dashArray: "4 4"}).addTo(miniLayers);
+      L.circle([v.lat, v.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.28, weight: 2, className: "zone-o"}).addTo(miniLayers);
       L.circleMarker([v.lat, v.lon], {radius: 6, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(miniLayers);
     }
   }
@@ -243,7 +243,7 @@ export default function App() {
         }).catch(e => console.error(e));
     }
     REAL_EVENTS.forEach(function(e){  // real venues today (source-linked in the event sheet)
-      var ring = L.circle([e.lat, e.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.12, weight: 1.5, dashArray: "6 6"}).addTo(bigLayers);
+      var ring = L.circle([e.lat, e.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.28, weight: 2.5, className: "zone-o"}).addTo(bigLayers);
       ring.on("click", function(){ openZone($("zoneChip")); });
       var mk = L.circleMarker([e.lat, e.lon], {radius: 9, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(bigLayers);
       mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
@@ -262,7 +262,13 @@ export default function App() {
           drawBig(); syncFields(true); renderPrediction();
        });
     });
-    if(a) bigMapL.setView([a.lat, a.lon], 12);
+    var ne = nearEvents()[0];
+    if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
+      var vb = L.latLngBounds([[a.lat, a.lon]]).extend(L.latLng(ne.lat, ne.lon).toBounds(HERE_KM*2000));
+      if(b) vb.extend([b.lat, b.lon]);
+      // keep clear of the search card + chip (top) and the place list sheet (bottom)
+      bigMapL.fitBounds(vb, {paddingTopLeft: [30, 170], paddingBottomRight: [30, 290], maxZoom: 15});
+    } else if(a) bigMapL.setView([a.lat, a.lon], 12);
   }
 
   /* ---------- fields ---------- */
@@ -687,7 +693,7 @@ export default function App() {
       return '<div class="zs-status '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
         (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><small>'+lvl+'</small> · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
     }).join(""):'<div class="empty">No real events listed for today.</div>';
-    var note='<div class="zs-sec"><p class="sub">The dashed '+HERE_KM+' km circle on the map is about the area where our New York data saw prices '+
+    var note='<div class="zs-sec"><p class="sub">The orange '+HERE_KM+' km circle on the map is about the area where our New York data saw prices '+
       'rise right after games (Yankee Stadium, its own taxi zone). It has not been measured in Malaysia, so no % is shown. '+
       'Each event links to its source.</p></div>';
     var acts='<div class="zs-acts"><button class="go" id="zsForecast" type="button">See forecast</button><button class="ghost" id="zsGot" type="button">Got it</button></div>';
