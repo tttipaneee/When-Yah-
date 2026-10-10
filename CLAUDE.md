@@ -87,6 +87,8 @@ Fill in as they're created; keep them working.
   = jam: "Wait" flips to "Book now — jam coming". If a Grab quote's trip gets ≥ 10% (and 3 min) longer later, the reason adds
   that Grab's fare includes a per-minute charge (Grab fare structure, Jan 2023), in words only. Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
+- `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as
+  `reports/case_studies.md`, checked by a test). Shown in the "What we saw in real ride data" card (no city named there).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
