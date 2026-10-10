@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON } from "./model";
+import { PLACE_LATLON, fetchEventsToday, kmBetween, klTime } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -29,6 +29,8 @@ export default function App() {
   var HI ={0:0,15:0,30:0,45:0,60:0};
   var PDROP=0;
   var MODEL=null,MODEL_ERR=null;
+  var REAL_EVENTS=[],EVENTS_LOADED=false;  // real events today from /api/events (each with source_url)
+  var NEAR_KM=5;
   var EVENT={
     at:"Axiata Arena",r:46,
     name:"Example concert",
@@ -187,7 +189,8 @@ export default function App() {
     miniLayers.clearLayers();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
-    var v = PLACE_LATLON[EVENT.at];
+    var near = nearEvents()[0];
+    var v = near ? {lat: near.lat, lon: near.lon} : null;
     if(a && b) {
       var bounds = L.latLngBounds([ [a.lat, a.lon], [b.lat, b.lon] ]);
       if(v) bounds.extend([v.lat, v.lon]);
@@ -212,7 +215,7 @@ export default function App() {
       L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
     }
     if(v) {
-      L.circle([v.lat, v.lon], {radius: 2000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.2, weight: 1}).addTo(miniLayers);
+      L.circleMarker([v.lat, v.lon], {radius: 7, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.9, weight: 2}).addTo(miniLayers);
     }
   }
   function drawBig(){
@@ -220,7 +223,6 @@ export default function App() {
     bigLayers.clearLayers();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
-    var v = PLACE_LATLON[EVENT.at];
     if(a && b && state.from !== state.to) {
       var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(bigLayers);
       fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
@@ -238,9 +240,11 @@ export default function App() {
            }
         }).catch(e => console.error(e));
     }
-    if(v) {
-      L.circle([v.lat, v.lon], {radius: 2000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.2, weight: 1}).addTo(bigLayers);
-    }
+    REAL_EVENTS.forEach(function(e){  // real venues today (source-linked in the event sheet)
+      var mk = L.circleMarker([e.lat, e.lon], {radius: 9, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(bigLayers);
+      mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
+      mk.on("click", function(){ openZone($("zoneChip")); });
+    });
     Object.keys(PLACE_LATLON).forEach(name => {
        var p = PLACE_LATLON[name];
        var isFrom = name === state.from, isTo = name === state.to;
@@ -454,6 +458,7 @@ export default function App() {
   }
   function renderPrediction(fromModel){
     if(!fromModel)requestModel();
+    renderRadar();  // pickup may have changed
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
     $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Tunggu "+bestMin+" min":"Tempah sekarang";
@@ -642,38 +647,40 @@ export default function App() {
     if(m<e+EVENT.easeMin)return 2;
     return 3;
   }
+  function pickupLL(){return state.fromLatLon||PLACE_LATLON[state.from]||null}
+  function nearEvents(){
+    var a=pickupLL();if(!a)return [];
+    return REAL_EVENTS.map(function(e){return Object.assign({km:kmBetween(a,e)},e)})
+      .filter(function(e){return e.km<=NEAR_KM}).sort(function(x,y){return x.km-y.km});
+  }
+  function evWhen(e){return klTime(e.start)+(e.end?"–"+klTime(e.end):" (end not published)")}
+  function renderRadar(){
+    var near=nearEvents(),t=$("radarText"),g=$("radarTag");
+    if(!t)return;
+    if(!EVENTS_LOADED){t.textContent="Loading real events…";return}
+    if(near.length){
+      var e=near[0];
+      t.textContent=e.name+" · "+e.venue+" · "+evWhen(e)+" · "+e.km.toFixed(1)+" km from your pickup"+(near.length>1?" (+"+(near.length-1)+" more)":"");
+    }else t.textContent=REAL_EVENTS.length?"No events within "+NEAR_KM+" km of your pickup today · "+REAL_EVENTS.length+" in Klang Valley":"No events listed for today";
+    if(g)g.textContent=REAL_EVENTS.length?REAL_EVENTS.length+" today":"Today";
+    $("chipText").textContent=near.length?"Event nearby · "+near[0].name:"Events today · "+REAL_EVENTS.length;
+  }
   function renderZoneSheet(){
-    var z=inZone(),canTrain=!!TRANSIT.COMBOS[state.from],ph=phaseNow();
-    var s=mins(EVENT.start),e=mins(EVENT.ends);
-    var surgeBig=EVENT.surge.replace(/ to \+?/,"–");
-    var head='<div class="zs-head"><span class="zs-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/></svg></span>'+
-      '<div><div class="zs-eyebrow"><span class="k2">Surge zone</span><span class="tag">Example</span></div><h3 id="zsTitle">'+esc(EVENT.name)+'</h3>'+
-      '<div class="zs-meta">'+esc(EVENT.venue)+'<br>Today, '+esc(EVENT.start)+'–'+esc(EVENT.ends)+'</div></div>'+
-      '<button class="x" id="zsClose" type="button" aria-label="Close event details"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
-    var status=z
-      ?'<div class="zs-status in">'+ICON_WARN+'<span>Your pickup ('+esc(state.from)+') is inside this zone</span></div>'
-      :'<div class="zs-status out">'+ICON_CHECK+'<span>Your pickup is outside this zone</span></div>';
-    var est='<div class="zs-est"><div><div class="k2">Estimated surge</div><div class="zs-big">'+esc(surgeBig)+'</div></div>'+
-      '<p>Expected crowd '+esc(EVENT.crowd)+'. Prices peak in the exit wave around '+esc(EVENT.ends)+', then ease within about '+EVENT.easeMin+' minutes as drivers return.</p></div>';
-    var why='<div class="zs-sec"><h4>Why prices are higher here</h4><div class="why-list">'+EVENT.reasons.map(function(r){
-      return whyRow({t:r.title,d:r.text,v:r.dir==="down"?-r.pts:r.pts,src:r.source});
-    }).join("")+'<div class="axis"><span>← Cheaper</span><span>Pricier →</span></div></div></div>';
-    var phases=[
-      {n:"Before event",t:"until "+EVENT.start},
-      {n:"During",t:EVENT.start+"–"+fmtMin(e-15)},
-      {n:"Exit wave",t:"around "+EVENT.ends},
-      {n:"Back to normal",t:"after "+fmtMin(e+EVENT.easeMin)}
-    ];
-    var tl='<div class="zs-sec"><h4>How the evening unfolds</h4><ol class="tl">'+phases.map(function(p,i){
-      var cls=i<ph?"past":i===ph?"now":"";
-      return '<li class="'+cls+'"'+(i===ph?' aria-current="step"':'')+'><i></i><b>'+p.n+'</b>'+esc(p.t)+(i===ph?'<br><b>Now</b>':'')+'</li>';
-    }).join("")+'</ol></div>';
-    var acts=z
-      ?'<div class="zs-acts"><button class="go" id="zsWalk" type="button">Walk to '+esc(WALK.n)+' (about '+WALK.min+' min)</button>'+
-        (canTrain?'<button class="ghost" id="zsTrain" type="button">Take the train out</button>':'')+
-        '<button class="ghost" id="zsForecast" type="button">See forecast</button></div>'
-      :'<div class="zs-acts"><button class="go" id="zsGot" type="button">Got it</button></div>';
-    $("zsBody").innerHTML=head+status+est+why+tl+acts;
+    // Real events today with sources; no price effect is shown (only validated for NYC baseball)
+    var a=pickupLL(),list=REAL_EVENTS.map(function(e){return Object.assign({km:a?kmBetween(a,e):null},e)})
+      .sort(function(x,y){return (x.km==null?1e9:x.km)-(y.km==null?1e9:y.km)});
+    var head='<div class="zs-head"><div><div class="zs-eyebrow"><span class="k2">Event radar</span><span class="tag">Real events</span></div>'+
+      '<h3 id="zsTitle">Events today</h3><div class="zs-meta">Near '+esc(state.from)+' · within '+NEAR_KM+' km is marked</div></div>'+
+      '<button class="x" id="zsClose" type="button" aria-label="Close event list"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
+    var rows=list.length?list.map(function(e){
+      var near=e.km!=null&&e.km<=NEAR_KM;
+      return '<div class="zs-status '+(near?'in':'out')+'">'+(near?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
+        (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
+    }).join(""):'<div class="empty">No real events listed for today.</div>';
+    var note='<div class="zs-sec"><p class="sub">Events can push prices up nearby, but we have not measured that for Malaysia, so no % is shown. '+
+      'Each event links to its source.</p></div>';
+    var acts='<div class="zs-acts"><button class="go" id="zsForecast" type="button">See forecast</button><button class="ghost" id="zsGot" type="button">Got it</button></div>';
+    $("zsBody").innerHTML=head+rows+note+acts;
   }
   function openZone(opener){
     zoneOpener=opener||document.activeElement;
@@ -777,10 +784,12 @@ export default function App() {
     else if(g==="events")sc.scrollTo({top:sc.scrollHeight,behavior:"smooth"});
     else toast("Proof: odds tested on 19M real rides (reports/metrics.md)");
   });
-  $("eventBtn").onclick=function(){openFs("from",this,true);openZone($("zoneChip"))};
+  $("eventBtn").onclick=function(){openZone(this)};
 
   document.documentElement.setAttribute("lang","en");
-  $("chipText").textContent="Surge zone \u00b7 "+EVENT.name+" at "+EVENT.at;
+  $("chipText").textContent="Events today";
+  fetchEventsToday().then(function(ev){REAL_EVENTS=ev||[];EVENTS_LOADED=true;renderRadar();drawMain(false);drawBig()})
+    .catch(function(){EVENTS_LOADED=true;renderRadar()});
   initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
 })();
@@ -865,8 +874,8 @@ export default function App() {
         <section aria-label="Events near pickup" id="events">
           <button className="event" type="button" id="eventBtn">
             <span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
-            <span><b>Event radar</b><small>Surge zone near your pickup is shown on the map</small></span>
-            <span className="tag">Example</span>
+            <span><b>Event radar</b><small id="radarText">Loading real events…</small></span>
+            <span className="tag" id="radarTag">Today</span>
           </button>
         </section>
       </div>

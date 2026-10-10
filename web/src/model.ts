@@ -70,3 +70,28 @@ export function runModel(inp: ModelInput): Promise<any> {
 }
 
 export const APP_ID_TO_NAME: Record<string, string> = { grab: "Grab", indrive: "inDrive", gvride: "GV Ride" }
+
+export interface RealEvent {
+  id: string; name: string; venue: string; lat: number; lon: number
+  start: string; end: string | null; source_url: string
+}
+
+/** Real events today (KL date) from /api/events — every row has a source_url (data/events/malaysia_events.csv). */
+export function fetchEventsToday(): Promise<RealEvent[]> {
+  const klDate = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+  return fetch(`/api/events?date=${klDate}`).then((r) => (r.ok ? r.json() : []))
+}
+
+/** Great-circle distance in km. */
+export function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const R = 6371, rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/** "16:00" from an ISO time with offset, shown in KL time. */
+export function klTime(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 8 * 3600_000)
+  return d.toISOString().slice(11, 16)
+}
