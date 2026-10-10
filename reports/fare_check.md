@@ -6,7 +6,11 @@ routes: OpenStreetMap (OSRM); real prices: `data/fares/offpeak_quotes.csv` (seen
 | Route | Seen at | km | min (free-flow) | Real RM | Estimate RM | Real ÷ estimate |
 |---|---|---|---|---|---|---|
 | Pavilion Suites → Mid Valley Megamall | 2026-10-10T15:44+08:00 | 7.9 | 11 | 14.00 | 8.81 | 1.59 |
+| Taylor's University Lakeside → Ayam Gepuk Lesung (Medan Maju Jaya; OSM point = Taman Maju Jaya PJS 2) | 2026-10-10T15:43+08:00 | 5.7 | 10 | 14.00 | 7.73 | 1.81 |
+| Taylor's University Lakeside → LRT SS15 | 2026-10-10T15:47+08:00 | 7.0 | 11 | 12.00 | 8.54 | 1.41 |
+| KLIA Terminal 1 → LRT SS15 | 2026-10-10T15:48+08:00 | 45.5 | 44 | 73.00 | 32.32 | 2.26 |
+| LRT Glenmarie → Bangsar Trade Centre | 2026-10-10T15:49+08:00 | 16.8 | 19 | 15.00 | 14.40 | 1.04 |
 
-- Median |error| of raw estimate: 37%; median real ÷ estimate: 1.59; steady (all within ±15% of median): True; quotes: 1
+- Median |error| of raw estimate: 37%; median real ÷ estimate: 1.59; steady (all within ±15% of median): False; quotes: 5
 
 **Result: FAIL — errors too large or not steady; the app keeps the typed harga biasa.**

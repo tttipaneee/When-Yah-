@@ -1,3 +1,7 @@
 seen_at,from_name,from_lat,from_lon,to_name,to_lat,to_lon,app,price_rm,note
 2026-10-10T15:44+08:00,Pavilion Suites,3.1482340,101.7125906,Mid Valley Megamall,3.1176552,101.6773741,grab,14.00,seen by Ravin in Grab app; no demand banner
 2026-10-10T15:45+08:00,MRT Pasar Seni,3.1423946,101.6962881,Sunway Pyramid,3.0724851,101.6065500,grab,19.00,EXCLUDED: Grab showed 'demand is high' so not an off-peak price
+2026-10-10T15:43+08:00,Taylor's University Lakeside,3.0632813,101.6170616,Ayam Gepuk Lesung (Medan Maju Jaya; OSM point = Taman Maju Jaya PJS 2),3.0830420,101.6407253,grab,14.00,seen by Ravin; destination approximate (restaurant not in OSM)
+2026-10-10T15:47+08:00,Taylor's University Lakeside,3.0632813,101.6170616,LRT SS15,3.0756824,101.5861786,grab,12.00,seen by Ravin
+2026-10-10T15:48+08:00,KLIA Terminal 1,2.7527291,101.7055234,LRT SS15,3.0756824,101.5861786,grab,73.00,seen by Ravin; airport trip (tolls/airport fee not in the rate formula)
+2026-10-10T15:49+08:00,LRT Glenmarie,3.0959075,101.5903895,Bangsar Trade Centre,3.1154617,101.6682240,grab,15.00,seen by Ravin; Grab showed 'low demand'
