@@ -1,0 +1,7 @@
+{
+ "status": "VALIDATED",
+ "window": "0–45 min after end",
+ "pct": 0.13,
+ "pct_source": "train-period mean uplift (held-out confirmed)",
+ "scope": "MLB games at Yankee Stadium, NYC, Aug 2024 — not applied to Malaysian events"
+}

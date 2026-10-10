@@ -1,0 +1,7 @@
+{
+ "validated": false,
+ "rule": "wait 30 min if P(drop>=10% @30) >= k x usual",
+ "k": 1.25,
+ "test_saving": 0.00098,
+ "hour_of_day_saving": 0.00288
+}

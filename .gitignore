@@ -8,3 +8,7 @@ data/raw/
 data/processed/
 ml/models/*.joblib
 .DS_Store
+web/node_modules/
+web/dist/
+.pytest_cache/
+!ml/models/lgbm_v1.joblib
