@@ -8,20 +8,29 @@ weekday/weekend type, from the train period only (Aug 1–21) − 1. 95% CI: boo
 VALIDATED needs both CIs to exclude 0 with the same sign and at least 5 held-out games.
 Train games: Aug 1–21 (21). Held-out games: Aug 22–31 (6).
 
-| Window | Train: games | Train uplift (95% CI) | Held-out: games | Held-out uplift (95% CI) | Holds? |
-|---|---|---|---|---|---|
-| 60–0 min before start | 14 | +1.5% (-2.2% … +5.6%) | 6 | -1.8% (-3.2% … -0.2%) | no |
-| 0–45 min after end | 20 | +13.0% (+6.3% … +19.4%) | 6 | +22.0% (+15.4% … +27.0%) | yes |
-| 45–90 min after end | 19 | +5.8% (-1.6% … +12.8%) | 6 | +15.9% (+11.8% … +20.4%) | no |
+| Window | Train: games | Train uplift (bootstrap CI) | Train t-CI | Held-out: games | Held-out uplift (bootstrap CI) | Held-out t-CI | Held-out games > 0 | Holds? |
+|---|---|---|---|---|---|---|---|---|
+| 60–0 min before start | 14 | +1.5% (-2.2% … +5.6%) | -2.9% … +5.9% | 6 | -1.8% (-3.2% … -0.2%) | -3.9% … +0.3% | 1/6 | no |
+| 0–45 min after end | 20 | +13.0% (+6.3% … +19.4%) | +5.8% … +20.2% | 6 | +22.0% (+15.4% … +27.0%) | +13.7% … +30.4% | 6/6 | yes |
+| 45–90 min after end | 19 | +5.8% (-1.6% … +12.8%) | -2.1% … +13.6% | 6 | +15.9% (+11.8% … +20.4%) | +9.8% … +22.1% | 6/6 | no |
 
 **Status: VALIDATED**
 
 Validated window: **0–45 min after end**, held-out uplift +22.0% (train +13.0%).
-Caveats: two baseball venues in one month of New York data; Malaysian venues and crowds differ.
-The app shows the effect as learned in New York, never as a Malaysian measurement.
+**Scope:** all 6 held-out games are at **Yankee Stadium** (Citi Field had no home games
+Aug 22–31), so what is validated is: MLB games at Yankee Stadium, the venue's own TLC zone, the
+first 45 min after the game ends, New York, Aug 2024. Nothing here tests KL concerts, talks or venues.
+**API use:** Malaysian events are listed with their source but `learned_effect` stays `null` and no
+event features are fed to the model (re-audit). The NYC result may be quoted as NYC evidence only.
 
 Method history (disclosed because the verdict changed while fixing the leakage audit):
 1. Controls from all non-game days in Aug (incl. held-out days): post-game train CI crossed 0 → NOT VALIDATED.
-2. Controls from non-game days in each game's own period: only 3 held-out games had controls → too few.
-3. Controls from train-period non-game days for every game (past data only; this report).
-The 5-game minimum was added at step 3. Treat the effect as a modest, NYC-baseball result.
+2. Between 1 and 2, windows.parquet was rebuilt (split-half noise control: ≥ 4 trips per half).
+3. Controls from non-game days in each game's own period: only 3 held-out games had controls → too few.
+4. Controls from train-period non-game days for every game (past data only; this report). Reason: the
+   all-August control set pulls in Aug 26+ days at Citi Field's zone during the US Open (zone 93 mean
+   index 1.30 in test vs 1.03 in train), and held-out data must not serve as its own control.
+The 5-game minimum was set at step 4, when exactly 6 held-out games existed.
+Re-audit checks: held-out non-game days at zone 247 treated as fake games give −3.4% (no drift
+inflation); re-anchoring to scheduled start + 170 min gives train +12.3%, held-out +22.2%.
+Treat the effect as a modest, single-venue, NYC-baseball result.

@@ -1,6 +1,6 @@
 """Train LightGBM models on TRAIN days only -> ml/models/lgbm_v1.joblib
 
-Two variants: no_level (time, rain, events) and with_level (+ current level idx_t).
+Two variants: no_level (time, rain, events) and with_level (+ current level idx_a(t) from trip-half A).
 Per variant and horizon h in 15/30/45/60: mean ratio (L2), p10 and p90 ratio (quantile) for the band,
 and a classifier for drop10_h (ratio_h <= 0.9). The p_drop10 decision threshold is tuned on VAL (max F1).
 Usage: python ml/train.py

@@ -46,16 +46,7 @@ def test_usual_price_uses_with_level_and_rm_only_from_quotes():
         assert d["wait_minutes"] in (15, 30, 45, 60) and set(d["expected_saving_rm"]) == {"grab", "indrive"}
 
 
-def test_learned_effect_only_when_validated_and_end_published():
-    from api.forecast import event_effect
-    from api.events import events_near
-    from datetime import datetime
+def test_malaysian_events_never_get_a_number():
     body = {**BODY, "datetime": "2026-10-11T21:00:00+08:00", "pickup": {"lat": 3.1394413, "lon": 101.7091281}}
     d = client.post("/api/forecast", json=body).json()
-    ends = {e.name: e.end for e in events_near(datetime.fromisoformat(body["datetime"]), 3.1394413, 101.7091281)}
-    assert d["events"]
-    for e in d["events"]:
-        if event_effect() is None or ends[e["name"]] is None:
-            assert e["learned_effect"] is None
-        else:
-            assert e["learned_effect"]["pct"] == event_effect()["pct"]
+    assert d["events"] and all(e["learned_effect"] is None for e in d["events"])

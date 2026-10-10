@@ -84,7 +84,7 @@ def main() -> None:
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
     oracle_best = actual.argmin(axis=1)
-    rows["Oracle (perfect foresight, upper bound)"] = policy_stats(
+    rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
         actual.min(axis=1) < 1, oracle_best, actual, clusters)
 
     surge = te.level.to_numpy() >= 1.2
@@ -177,6 +177,8 @@ def main() -> None:
           "- An earlier version of this report (commit 172d4a1) showed larger savings; the leakage audit found",
           "  that most of it was sampling noise (the same noisy window average was both input and outcome).",
           "  Those numbers are withdrawn. The p10–p90 band (≈ 80% coverage) is still an honest range.",
+          "- All outcomes are window averages of ≥ 4 trips, not one rider re-quoting the same trip; a single",
+          "  rider's band and drop chances may differ (likely a narrower band).",
           "- Patterns are learned in New York (Aug 2024) and applied to the user's local clock in Klang Valley.",
           "  They are not Malaysian data; typed quotes would become Malaysian training data (roadmap)."]
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")

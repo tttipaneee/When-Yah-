@@ -50,6 +50,14 @@ def uplifts(z: pd.DataFrame, games: pd.DataFrame, anchor: str, a: int, b: int, a
     return np.array(out)
 
 
+def t_ci(x: np.ndarray) -> str:
+    from scipy import stats
+    if len(x) < 3:
+        return "n/a"
+    h = stats.t.ppf(0.975, len(x) - 1) * x.std(ddof=1) / np.sqrt(len(x))
+    return f"{x.mean() - h:+.1%} … {x.mean() + h:+.1%}"
+
+
 def ci(x: np.ndarray) -> tuple[float, float, float]:
     if len(x) < 3:
         return float("nan"), float("nan"), float("nan")
@@ -71,8 +79,8 @@ def main() -> None:
          "weekday/weekend type, from the train period only (Aug 1–21) − 1. 95% CI: bootstrap over games.",
          f"VALIDATED needs both CIs to exclude 0 with the same sign and at least {MIN_HELD} held-out games.",
          f"Train games: Aug 1–21 ({len(train)}). Held-out games: Aug 22–31 ({len(held)}).", "",
-         "| Window | Train: games | Train uplift (95% CI) | Held-out: games | Held-out uplift (95% CI) | Holds? |",
-         "|---|---|---|---|---|---|"]
+         "| Window | Train: games | Train uplift (bootstrap CI) | Train t-CI | Held-out: games | Held-out uplift (bootstrap CI) | Held-out t-CI | Held-out games > 0 | Holds? |",
+         "|---|---|---|---|---|---|---|---|---|"]
     verdicts = {}
     for name, (anchor, a, b) in WINDOWS.items():
         tr = uplifts(z, train, anchor, a, b, ev, ("2024-08-01", "2024-08-22"))
@@ -80,16 +88,19 @@ def main() -> None:
         (mt, lt, ht), (mh, lh, hh) = ci(tr), ci(he)
         ok = len(he) >= MIN_HELD and ((lt > 0 and lh > 0) or (ht < 0 and hh < 0))
         verdicts[name] = (ok, mt, mh)
-        L.append(f"| {name} | {len(tr)} | {mt:+.1%} ({lt:+.1%} … {ht:+.1%}) | {len(he)} | "
-                 f"{mh:+.1%} ({lh:+.1%} … {hh:+.1%}) | {'yes' if ok else 'no'} |")
+        L.append(f"| {name} | {len(tr)} | {mt:+.1%} ({lt:+.1%} … {ht:+.1%}) | {t_ci(tr)} | {len(he)} | "
+                 f"{mh:+.1%} ({lh:+.1%} … {hh:+.1%}) | {t_ci(he)} | {(he > 0).sum()}/{len(he)} | {'yes' if ok else 'no'} |")
     held_ok = [k for k, (ok, *_) in verdicts.items() if ok]
     status = "VALIDATED" if held_ok else "NOT VALIDATED"
     L += ["", f"**Status: {status}**", ""]
     if held_ok:
         k = held_ok[0]
         L += [f"Validated window: **{k}**, held-out uplift {verdicts[k][2]:+.1%} (train {verdicts[k][1]:+.1%}).",
-              "Caveats: two baseball venues in one month of New York data; Malaysian venues and crowds differ.",
-              "The app shows the effect as learned in New York, never as a Malaysian measurement."]
+              f"**Scope:** all {len(held)} held-out games are at **Yankee Stadium** (Citi Field had no home games",
+              "Aug 22–31), so what is validated is: MLB games at Yankee Stadium, the venue's own TLC zone, the",
+              "first 45 min after the game ends, New York, Aug 2024. Nothing here tests KL concerts, talks or venues.",
+              "**API use:** Malaysian events are listed with their source but `learned_effect` stays `null` and no",
+              "event features are fed to the model (re-audit). The NYC result may be quoted as NYC evidence only."]
     else:
         L += ["No window holds on held-out games, so the app lists real nearby events (with sources) but",
               "shows **no number** for their effect (`learned_effect: null`) and does not feed event features",
@@ -101,13 +112,20 @@ def main() -> None:
                   "\"prices often rise right after big events\" as a hypothesis, without a number."]
     L += ["", "Method history (disclosed because the verdict changed while fixing the leakage audit):",
           "1. Controls from all non-game days in Aug (incl. held-out days): post-game train CI crossed 0 → NOT VALIDATED.",
-          "2. Controls from non-game days in each game's own period: only 3 held-out games had controls → too few.",
-          "3. Controls from train-period non-game days for every game (past data only; this report).",
-          f"The {MIN_HELD}-game minimum was added at step 3. Treat the effect as a modest, NYC-baseball result."]
+          "2. Between 1 and 2, windows.parquet was rebuilt (split-half noise control: ≥ 4 trips per half).",
+          "3. Controls from non-game days in each game's own period: only 3 held-out games had controls → too few.",
+          "4. Controls from train-period non-game days for every game (past data only; this report). Reason: the",
+          "   all-August control set pulls in Aug 26+ days at Citi Field's zone during the US Open (zone 93 mean",
+          "   index 1.30 in test vs 1.03 in train), and held-out data must not serve as its own control.",
+          f"The {MIN_HELD}-game minimum was set at step 4, when exactly 6 held-out games existed.",
+          "Re-audit checks: held-out non-game days at zone 247 treated as fake games give −3.4% (no drift",
+          "inflation); re-anchoring to scheduled start + 170 min gives train +12.3%, held-out +22.2%.",
+          "Treat the effect as a modest, single-venue, NYC-baseball result."]
     k = held_ok[0] if held_ok else None
     SUMMARY.write_text(json.dumps({"status": status, "window": k,
                                    "pct": round(float(verdicts[k][1]), 3) if k else None,
-                                   "pct_source": "train-period mean uplift (held-out confirmed)" if k else None},
+                                   "pct_source": "train-period mean uplift (held-out confirmed)" if k else None,
+                                   "scope": "MLB games at Yankee Stadium, NYC, Aug 2024 — not applied to Malaysian events"},
                                   ensure_ascii=False, indent=1), encoding="utf-8")
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))

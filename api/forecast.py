@@ -3,8 +3,8 @@
 Flow: features for (local time, rain, nearby real event) -> with_level model if the user gave a usual
 price (level = median quote / usual price), else no_level -> ratio at +15/30/45/60 with p10-p90 band and
 P(drop >= 10%) -> applied to each typed quote. RM values are only ever typed quote x predicted ratio.
-Event features and learned_effect are used only when reports/event_effect.md says VALIDATED (read via
-reports/event_effect.json) and the event has a published end time; otherwise events are listed without a number. If the model file is missing the API answers 503 (no placeholder numbers).
+Malaysian events are listed with their sources but never get a number (learned_effect null) and are not
+fed to the model: the validated effect in reports/event_effect.md is for NYC baseball at one venue only. If the model file is missing the API answers 503 (no placeholder numbers).
 """
 from datetime import timedelta
 import json
@@ -16,7 +16,7 @@ import joblib
 from fastapi import HTTPException
 
 from api.events import events_near
-from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, LearnedEffect
+from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint
 from ml.features import LEVEL_RANGE, serve_row
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,7 +53,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
     if req.usual_price_rm and quotes:
         level = median(quotes.values()) / req.usual_price_rm
     variant = "with_level" if level is not None else "no_level"
-    use_event = event is not None and event_effect_validated()
+    use_event = False  # event features never served for Malaysian events (re-audit: untested transfer)
     X = serve_row(req.datetime, req.rain, event.start if use_event else None,
                   event.end if use_event else None, level)[b["features"][variant]]
     out = {}
@@ -102,19 +102,12 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         reasons.append(f"Expected saving from waiting does not beat the risk of a rise "
                        f"(up to {best.pct_high:+.0%} at +{best.minutes} min)")
     reasons.append("rain" if req.rain else "no rain")
+    # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
-    events, ev_reasons = [], []
-    for e in nearby:
-        # a learned effect needs a published end time, because the validated window is "after end"
-        le = LearnedEffect(pct=eff["pct"], window=eff["window"]) if eff and e.end else None
-        events.append(ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=le))
-        if le:
-            ev_reasons.append(f"Event nearby: {e.name} ends {e.end:%H:%M}; in New York data prices near venues "
-                              f"were {le.pct:+.0%} in the {le.window} window (reports/event_effect.md)")
-        elif eff:
-            ev_reasons.append(f"Event nearby: {e.name} (no published end time, so no effect estimate)")
-        else:
-            ev_reasons.append(f"Event nearby: {e.name} (effect on price not validated)")
+    events = [ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None) for e in nearby]
+    ev_reasons = [f"Event nearby: {e.name}" + (" — in New York data, prices near a baseball stadium rose right "
+                                              "after games; not measured for Malaysian events" if eff else
+                                              " (effect on price not validated)") for e in nearby]
     reasons += ev_reasons
     reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
     reasons.append("On held-out data this advice did not beat a simple time-of-day rule; see reports/metrics.md")

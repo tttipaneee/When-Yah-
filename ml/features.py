@@ -25,7 +25,7 @@ BASE = ["hour", "minute", "dow", "weekend", "rain"]
 EVENT = ["event_nearby", "during_event", "minutes_to_start", "minutes_since_end"]
 NO_LEVEL = BASE + EVENT
 WITH_LEVEL = NO_LEVEL + ["level"]
-LEVEL_RANGE = (0.5, 2.0)       # serving clip, inside the training range of idx_t
+LEVEL_RANGE = (0.5, 2.0)       # serving clip, inside the training range of idx_a
 
 
 def time_features(ts: pd.Series) -> pd.DataFrame:
