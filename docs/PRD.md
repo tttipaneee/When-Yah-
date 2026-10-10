@@ -26,9 +26,9 @@ background location tracking, avatar (later), live Google traffic.
 | Layer | Choice |
 |---|---|
 | Data/ML | Python 3.11, pandas, pyarrow, scikit-learn, LightGBM, joblib |
-| Primary data | Kaggle "Uber and Lyft Dataset Boston, MA" (ravi72munde): price, distance, product, surge multiplier, source/destination area, timestamp; hourly weather |
-| Event data (training) | Public Celtics/Bruins home-game schedules at TD Garden (North Station area) for the dataset's dates, with source URLs |
-| Backup data | City of Chicago "Transportation Network Providers – Trips" |
+| Primary data | NYC TLC High Volume FHV trip records, Aug 2024 (`fhvhv_tripdata_2024-08.parquet`, 19.1M trips): request time, pickup zone, miles, minutes, base passenger fare, company (HV0003 Uber, HV0005 Lyft). Boston Kaggle set rejected at go/no-go (no time signal) — `reports/signal_check.md` |
+| Event data (training) | Real Aug 2024 events at NYC venues (Madison Square Garden, Barclays Center, Yankee Stadium, Citi Field) with source URLs → `data/events/nyc_events_2024-08.csv` |
+| Backup data | Another NYC HVFHV month (same schema) if more history is needed |
 | Event data (Malaysia) | Real upcoming events from official venue/ticketing pages, stored with source URLs in `data/events/malaysia_events.csv` |
 | API | FastAPI + uvicorn, Pydantic |
 | Frontend | Vite + React + TypeScript; chart lib and styling chosen with Partner's design |
@@ -47,7 +47,7 @@ P0 = must work in demo · P1 = should · P2 = only if ahead.
 | FR6 | Judges' metrics screen: policy savings vs baselines, P(drop) AUC, forecast error vs persistence, event-effect result | P0 (pitch) |
 | FR7 | Rain toggle that changes the forecast | P1 |
 | FR8 | Presenter route `/demo`: preset scenarios (Fri 18:10 peak, Sat 22:45 near an event, Tue 14:00 quiet) with example quotes clearly marked "example" | P0 |
-| FR9 | "Walk out of the zone" tip — only if `reports/event_effect.md` shows lower prices in neighbouring areas on game nights | P2 |
+| FR9 | "Walk out of the zone" tip — only if `reports/event_effect.md` shows lower prices in neighbouring zones on event nights | P2 |
 | FR10 | "Use my location" one-shot geolocation for nearby events | P2 |
 
 Non-functional: forecast < 1 s; works offline; no personal data stored.
@@ -57,8 +57,8 @@ Non-functional: forecast < 1 s; works offline; no personal data stored.
 - **Targets:** ratio `idx_t+h / idx_t` for h ∈ {15, 30, 45, 60}; `drop10_30` = index falls ≥10% within 30 min.
 - **Two model variants:** (a) *no-level* — time, weekday, weather, event features only; (b) *with-level* —
   adds current surge level, used when the user gives a usual price (level = quote ÷ usual price).
-- **Event effect:** features `minutes_to_start`, `minutes_since_end`, `event_nearby` from real TD Garden
-  games; tested on held-out game nights → `reports/event_effect.md`.
+- **Event effect:** features `minutes_to_start`, `minutes_since_end`, `event_nearby` from real NYC venue
+  events; tested on held-out event nights → `reports/event_effect.md`.
 - Details and leakage rules: `.claude/rules/ml.md`.
 
 ## 5. Architecture
@@ -78,9 +78,9 @@ source (model metrics, user input, cited event page).
 ## 7. Milestones — divided by 2
 | Time (MYT) | Ravin | Partner |
 |---|---|---|
-| 12:00–12:30 | Repo setup; download Boston dataset; collect TD Garden home-game dates/times for the dataset period (with URLs) | Sketch screens |
-| 12:30–14:00 | `check_signal.py` (time signal + game-night effect) → `reports/signal_check.md` | Designs → `design/`; collect real Malaysian events with source URLs |
-| **14:00 go/no-go** | Enough signal → continue; else switch to Chicago (≤30 min; event effect then dropped) | — |
+| 12:00–12:30 | Repo setup; download data (Boston, then NYC HVFHV Aug 2024) | Sketch screens |
+| 12:30–14:00 | `check_signal_nyc.py` → `reports/signal_check.md` ✅ done: Boston NO-GO, NYC GO (modest) | Designs → `design/`; collect real Malaysian events with source URLs |
+| **14:00 go/no-go** | ✅ GO on NYC. Collect real Aug 2024 NYC venue events (MSG, Barclays, Yankee Stadium, Citi Field) with URLs | — |
 | 14:00–17:00 | `build_dataset.py`, `features.py`, `train.py` (no-level + with-level), `evaluate.py` with baselines; stub `/api/forecast` | Frontend against stub API: quote entry, forecast chart, countdown, decision |
 | 17:00–19:00 | Real `/api/forecast` applying % change to quotes; `/api/events` from the CSV | Wire screens; ranking |
 | **19:00 checkpoint** | **End-to-end: typed quote → forecast → "wait 25 min, save RM4"** | |
@@ -102,8 +102,8 @@ source (model metrics, user input, cited event page).
 5. Event effect number (keep the real event list)
 
 ## 10. Risks
-1. Price barely moves over time in Boston data → 14:00 go/no-go, Chicago backup.
-2. Few games in the data period → event effect may not validate → show events without numbers.
+1. Signal is modest (simple model beats persistence by ~5% MAE at +30 min) → pitch savings honestly; Boston already rejected for no signal.
+2. Few events in the data period → event effect may not validate → show events without numbers.
 3. Surge is hard to predict (a Chicago project reached ~25% precision) → probabilities and savings vs baselines.
 4. US patterns applied to KL → state it plainly; roadmap: users' typed quotes become Malaysian training data.
 5. inDrive is bid-based → the typed inDrive price is the rider's offer/accepted fare; treat it as a quote.

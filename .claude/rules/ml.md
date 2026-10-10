@@ -9,12 +9,15 @@ paths:
 # ML & data rules — When Yah?
 
 ## Datasets
-- **Primary:** Kaggle "Uber and Lyft Dataset Boston, MA" (ravi72munde). Check actual column names and
-  date range on load; don't assume.
-- **Game schedules:** Celtics and Bruins home games at TD Garden during the dataset's dates, from public
-  schedule pages; save `data/events/td_garden_games.csv` (tracked in git) with date, start time, end time (or start + a
-  typical duration stated by the source), and source URL.
-- **Backup:** City of Chicago "Transportation Network Providers – Trips" (one recent month).
+- **Primary:** NYC TLC High Volume FHV trips, Aug 2024 — `data/raw/fhvhv_tripdata_2024-08.parquet`
+  (19 row groups, 19.1M rows). Columns used: hvfhs_license_num, request_datetime, PULocationID,
+  trip_miles, trip_time, base_passenger_fare. **Read row group by row group** (full load OOMs in 4 GB);
+  see `ml/check_signal_nyc.py` for the pattern.
+- **Rejected:** Boston Kaggle set (no time signal) — reasons in `reports/signal_check.md`.
+  `data/events/td_garden_games.csv` is kept only as a record; not used.
+- **Events (training):** real Aug 2024 events at NYC venues (MSG, Barclays, Yankee Stadium, Citi Field)
+  in `data/events/nyc_events_2024-08.csv` with venue, pickup zone ID, date, start, end, source_url.
+- **Ignore** any `ehailing_fake_data.csv` — fake data never enters the repo or the model.
 - Raw data in `data/raw/` (gitignored). Malaysian events in `data/events/malaysia_events.csv` with a
   `source_url` for every row.
 
@@ -23,8 +26,8 @@ Compute the price index (price ÷ expected base for distance + product, fitted o
 - how often the index changes by ≥10% within 15–60 minutes
 - variance explained by hour × weekday (and by area, for analysis only)
 - lag autocorrelation
-- North Station index on game nights vs same hours on non-game nights (effect size + number of games)
-Recommend GO (Boston) or SWITCH (Chicago) with the numbers.
+- Venue-zone index on event nights vs same hours on non-event nights (effect size + number of games)
+Result: Boston NO-GO, NYC GO (modest) — see `reports/signal_check.md`.
 
 ## Targets & features
 - Targets: `ratio_h = idx_t+h / idx_t` for h ∈ {15, 30, 45, 60}; `drop10_30`.
@@ -47,8 +50,8 @@ On the test period with actual future prices:
 Report both variants. If we don't beat the baselines, say so plainly.
 
 ## Event effect (`ml/event_effect.py` → `reports/event_effect.md`)
-Fit the event features on training game nights; test on held-out game nights. Report effect size with
-an interval and the number of games. Mark **VALIDATED** only if the effect holds on held-out games;
+Fit the event features on training event nights; test on held-out event nights. Report effect size with
+an interval and the number of games. Mark **VALIDATED** only if the effect holds on held-out events;
 otherwise **NOT VALIDATED** — the API then returns `learned_effect: null`.
 
 ## Evidence rule

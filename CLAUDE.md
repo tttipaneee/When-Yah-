@@ -15,9 +15,9 @@ is likely cheapest at the best time, and warns when a real event nearby is likel
 
 ## The evidence rule — never break it
 Every number shown in the app, README or slides must trace to **real data** or a **cited, dated source**.
-- **Real data:** model trained and evaluated on public ride-hailing data (Boston Uber/Lyft; Chicago backup).
+- **Real data:** model trained and evaluated on public ride-hailing data (NYC TLC High Volume FHV trip records, Uber/Lyft, Aug 2024). Boston was rejected at go/no-go — see `reports/signal_check.md`.
 - **Real input:** prices the user types from their own apps ("Masukkan harga yang anda nampak"), optional usual price ("harga biasa").
-- **Learned from real data, only if validated:** event effect from real TD Garden games (North Station area) — shown only if `reports/event_effect.md` confirms it on held-out data.
+- **Learned from real data, only if validated:** event effect from real NYC venue events (e.g. Madison Square Garden, Barclays Center, Yankee Stadium; Aug 2024, sourced) — shown only if `reports/event_effect.md` confirms it on held-out data.
 - **Cited sources:** real Malaysian event schedules (venue, date, time, source URL); 2× surcharge ceiling (Ministry of Transport statement, May 2022 — cite with date).
 - **Not allowed:** invented fares, multipliers, per-app RM prices, area adjustments or event uplifts. If a value can't be traced, don't show it.
 - We are **not** connected to Grab, inDrive or GV Ride. Never claim it; never scrape or automate their apps.
@@ -71,7 +71,7 @@ They report only; fix findings in the main session.
 ## Rules
 1. **Evidence rule above, always.** No traceable source → no number.
 2. **Time-based splits only.** Earlier days train, later days test. Features use only information available at time t.
-3. **Area-agnostic served model.** Boston area IDs may be used in analysis but not as features in the model served for Malaysia.
+3. **Area-agnostic served model.** NYC zone IDs may be used in analysis but not as features in the model served for Malaysia.
 4. **Always compare to baselines:** "book now" and "hour-of-day average ratio". If we don't beat them, say so.
 5. **Location:** one-time browser geolocation with permission, used only to find nearby events; never stored.
 6. **Demo path first.** Keep quote → forecast → decision working end-to-end. Stub `/api/forecast` until the real model passes evaluation.
