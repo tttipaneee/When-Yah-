@@ -333,3 +333,16 @@ def test_usual_endpoint_shape(monkeypatch):
     assert d["rm"] == 16.62 and d["validated"] is False
     if "time_factor" in d:  # model v2 served: usual price at this hour = formula x the model's hour/weekday factor
         assert abs(d["rm_at_this_time"] - 16.62 * d["time_factor"]) < 0.02  # factor shown rounded to 3 dp
+
+
+def test_no_wait_when_10pct_drop_is_under_rm_1_50():
+    # RM 12 vs usual RM 8 (1.5x, the strongest wait signal): 10% = RM 1.20 < RM 1.50 -> never "wait"
+    d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
+                                           "quotes": [{"app": "grab", "price_rm": 12.0}], "usual_price_rm": 8.0}).json()
+    assert d["decision"] == "book_now" and d["wait_minutes"] == 0
+    big = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
+                                             "quotes": [{"app": "grab", "price_rm": 30.0}], "usual_price_rm": 20.0}).json()
+    if big["decision"] == "book_now":  # same level, RM 30: the RM minimum is not the reason
+        assert not any("RM 1.50 minimum" in r for r in big["reasons"])
+    if d["decision"] == "book_now" and big["decision"] == "wait":
+        assert any("RM 1.50 minimum" in r for r in d["reasons"])
