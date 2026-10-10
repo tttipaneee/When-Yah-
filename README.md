@@ -46,6 +46,10 @@ to beat both baselines and failed); treat the "Wait" result as exploratory.
 So the app says **"Wait X min"** when the odds are clearly above usual, otherwise **book now**, and always
 shows how often waiting still cost more in tests.
 
+**Traffic (optional TomTom key):** predicted trip time for leaving now … +60 min. A jam (≥ 25% longer) turns
+"Wait" into "Book now — jam coming"; if a Grab trip gets clearly longer later, the app notes that Grab's fare
+includes a per-minute charge ([Grab fare change, Jan 2023](https://carz.com.my/2023/01/grab-revises-fare-structure-rides-during-peak-hours-to-cost-more)) — words only, no RM estimate.
+
 **Tested and rejected** (rules fixed in code before each run): a second quote / price trend
 (`reports/trend_experiment.md`), borough-wide averaging (`reports/borough_experiment.md`, inconclusive),
 traffic and "why is it high" (`reports/traffic_experiment.md`), applying the NYC event effect to KL

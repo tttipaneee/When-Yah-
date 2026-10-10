@@ -81,7 +81,8 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
 HERE_KM = 1.0  # "right here": about the venue's own NYC taxi zone (~0.75-1.3 km), where the effect was measured
-JAM_FACTOR = 1.25  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
+JAM_FACTOR = 1.25
+PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
 def forecast(req: ForecastRequest) -> ForecastResponse:
@@ -150,6 +151,13 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
             m_ = best.minutes if (wait and best.minutes in tm) else max(tm)
             traffic_reason = (f"Traffic: trip {now_min:.0f} min if you leave at {at(0)}, {tm[m_]:.0f} min at "
                               f"{at(m_)} ({src}) — no jam predicted")
+        # Grab's fare includes a per-minute charge (Grab Klang Valley fare change, Jan 2023 — carz.com.my /
+        # Malay Mail), so a clearly slower trip later likely costs more. Words only: no RM figure (the published
+        # rates did not match real quotes well, reports/fare_check.md).
+        if "grab" in quotes and tm[worst] >= max(PER_MIN_FACTOR * now_min, now_min + 3):
+            traffic_reason += (f". Leaving at {at(worst)} takes {tm[worst] - now_min:.0f} min longer, and Grab's fare "
+                               "includes a per-minute charge (Grab fare structure, Jan 2023), so the later trip "
+                               "likely costs more")
         traffic = TrafficInfo(source=src, minutes=tm, jam_ahead=jam,
                               flipped_to_book_now=flipped)
     wait_minutes = best.minutes if wait else 0
@@ -190,7 +198,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         if rise.pct_change >= 0.015:  # model expects the price to edge up (e.g. toward the evening peak)
             reasons.append(f"Book now: the model expects the price to edge up by +{rise.minutes} min "
                            f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
-                           "a time-of-day pattern from our training data; it can't see live traffic")
+                           "a time-of-day pattern from our training data"
+                           + ("" if traffic is not None else "; it can't see live traffic"))
         else:
             reasons.append(f"Book now: chance of a ≥10% drop is {best.p_drop10:.0%} at best (+{best.minutes} min), "
                            f"under our {MIN_WAIT_P:.0%} minimum to advise waiting")

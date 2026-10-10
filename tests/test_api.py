@@ -156,3 +156,15 @@ def test_event_levels_right_here_and_in_area():
     area = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0763304, "lon": 101.7111343}}).json()
     e = next(x for x in area["events"] if "MAMAMOO" in x["name"])  # Bandar Tasik Selatan, ~3 km away
     assert e["level"] == "in_area" and 1.0 < e["km"] <= 5.0
+
+
+def test_grab_per_minute_note_when_trip_gets_longer(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 20.0, 15: 21.0, 30: 23.0, 45: 24.0, 60: 24.0})
+    body = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "pickup": {"lat": 3.158, "lon": 101.7117},
+            "dropoff": {"lat": 3.1177, "lon": 101.6774}, "quotes": [{"app": "grab", "price_rm": 15.0}],
+            "usual_price_rm": 15.0}
+    d = client.post("/api/forecast", json=body).json()
+    assert any("per-minute charge" in r for r in d["reasons"])
+    no_grab = {**body, "quotes": [{"app": "indrive", "price_rm": 15.0}]}
+    assert not any("per-minute" in r for r in client.post("/api/forecast", json=no_grab).json()["reasons"])
