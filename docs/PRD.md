@@ -27,7 +27,8 @@ after seeing test results (disclosed in `reports/metrics.md`) — exploratory. E
 multipliers or per-app prices (see `CLAUDE.md`).
 
 **Out of scope.** Live connection to ride-hailing apps, scraping, simulated prices, accounts, payments,
-background location tracking, avatar (later), live Google traffic.
+background location tracking, avatar (later). Traffic is shown as **predicted trip time** (TomTom, optional key)
+and can turn "Tunggu" into "Book now — jam coming"; it is not a price-model input (tested: no gain).
 
 ## 2. Tech stack
 | Layer | Choice |

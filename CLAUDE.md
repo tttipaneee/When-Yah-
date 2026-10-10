@@ -37,7 +37,7 @@ scripts/         run_demo.sh
 
 ## Commands
 Fill in as they're created; keep them working.
-- Setup: `pip install -r requirements.txt && (cd web && npm install)`
+- Setup: `pip install -r requirements.txt && (cd web && npm install)`; optional `TOMTOM_API_KEY` in `.env` for traffic
 - Download data: `scripts/download_data.sh` (sha256-verified, 19,128,392 rows)
 - NYC venue events: `python ml/fetch_nyc_events.py` → `data/events/nyc_events_2024-08.csv`
 - Weather (NOAA Central Park hourly): `python ml/fetch_weather.py` → `data/weather/nyc_central_park_2024-08.csv`
@@ -77,6 +77,11 @@ Fill in as they're created; keep them working.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
+- Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
+  are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
+  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now} | null`. A departure ≥ 25% longer than now
+  = jam: "Tunggu" flips to "Book now — jam coming". Minutes only — traffic is **not** a price-model input
+  (`reports/traffic_experiment.md`).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.

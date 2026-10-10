@@ -18,7 +18,8 @@ from fastapi import HTTPException
 
 from api.events import events_near
 from api.fare import estimate as fare_estimate
-from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, WaitOdds
+from api.traffic import predicted_minutes
+from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
 from ml.train import drop_prob
 
@@ -79,6 +80,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
+JAM_FACTOR = 1.25  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
 def forecast(req: ForecastRequest) -> ForecastResponse:
@@ -119,6 +121,34 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     best = max(horizon, key=lambda h: mults[h.minutes])
     odds_high = k is not None and mults[best.minutes] >= k
     wait = bool(gate.get("validated")) and odds_high
+    # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
+    # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
+    # if waiting puts the trip in much heavier traffic, don't advise waiting.
+    traffic, traffic_reason = None, None
+    src = "traffic prediction sent by the app"
+    raw_tm = req.traffic_min
+    if raw_tm is None and req.pickup and req.dropoff:
+        raw_tm = predicted_minutes((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon), req.datetime)
+        src = "TomTom traffic prediction"
+    tm = {int(k_): float(v_) for k_, v_ in (raw_tm or {}).items() if v_ and v_ > 0}
+    if 0 in tm and len(tm) > 1:
+        now_min = tm[0]
+        worst = max((m for m in tm if m > 0), key=lambda m: tm[m])
+        jam = tm[worst] >= JAM_FACTOR * now_min
+        flipped = False
+        at = lambda m: (req.datetime + timedelta(minutes=m)).strftime("%H:%M")
+        if wait and tm.get(best.minutes, 0) >= JAM_FACTOR * now_min:
+            wait, flipped = False, True
+            traffic_reason = (f"Book now — jam coming: trip {now_min:.0f} min if you leave now vs "
+                              f"{tm[best.minutes]:.0f} min at {at(best.minutes)} ({src})")
+        elif jam:
+            traffic_reason = (f"Traffic predicted to build: trip {now_min:.0f} min now, {tm[worst]:.0f} min if you "
+                              f"leave at {at(worst)} ({src})")
+        elif wait and best.minutes in tm:
+            traffic_reason = (f"Traffic: trip {now_min:.0f} min now, {tm[best.minutes]:.0f} min at "
+                              f"{at(best.minutes)} ({src})")
+        traffic = TrafficInfo(source=src, minutes=tm, jam_ahead=jam,
+                              flipped_to_book_now=flipped)
     wait_minutes = best.minutes if wait else 0
     saving, risk = {}, {}
     if wait:
@@ -147,6 +177,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
               "on average (a simple time-of-day rule saved slightly more overall)")
         reasons.append(f"Tunggu {best.minutes} min: odds of a ≥10% drop are {mults[best.minutes]:.1f}x the usual; "
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
+    elif odds_high and traffic is not None and traffic.flipped_to_book_now:
+        pass  # the traffic reason explains the book-now
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
@@ -157,6 +189,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                            "a time-of-day pattern learned from NYC data; it can't see live KL traffic")
         else:
             reasons.append("Odds of a drop are not clearly above usual — book now")
+    if traffic_reason:
+        reasons.append(traffic_reason)
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
@@ -173,6 +207,6 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         apps_ranked_now=_rank(quotes), apps_ranked_best_time=_rank(at_best),
         events=events, reasons=reasons,
         model_version=f"lgbm_v1/{variant}",
-        usual_price_estimate=est,
+        usual_price_estimate=est, traffic=traffic,
         evidence={"metrics": "reports/metrics.md", "event_effect": "reports/event_effect.md"},
     )

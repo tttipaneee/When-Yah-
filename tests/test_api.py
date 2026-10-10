@@ -110,3 +110,39 @@ def test_tunggu_only_when_rule_validated_and_odds_high():
     quiet = {**BODY, "datetime": "2026-10-13T14:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 12.0}],
              "usual_price_rm": 15.0}
     assert client.post("/api/forecast", json=quiet).json()["decision"] == "book_now"
+
+
+def test_traffic_jam_flips_tunggu_and_warns():
+    jam = {**BODY, "datetime": "2026-10-16T18:10:00+08:00", "quotes": [{"app": "grab", "price_rm": 40.0}],
+           "usual_price_rm": 20.0}
+    base = client.post("/api/forecast", json=jam).json()
+    if base["decision"] == "wait":
+        h = base["wait_minutes"]
+        d = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 32}}).json()
+        assert d["decision"] == "book_now" and d["traffic"]["flipped_to_book_now"]
+        assert any(r.startswith("Book now — jam coming") for r in d["reasons"])
+        assert not any(r.startswith("Tunggu") for r in d["reasons"])
+        clear = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 18}}).json()
+        assert clear["decision"] == "wait" and not clear["traffic"]["jam_ahead"]
+    quiet = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 22.0}],
+             "usual_price_rm": 20.0, "traffic_min": {"0": 18, "15": 20, "30": 26, "45": 30, "60": 34}}
+    d = client.post("/api/forecast", json=quiet).json()
+    assert d["traffic"]["jam_ahead"] and any(r.startswith("Traffic predicted to build") for r in d["reasons"])
+    assert client.post("/api/forecast", json=BODY).json()["traffic"] is None
+
+
+def test_tomtom_traffic_used_when_pickup_and_dropoff(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 18.0, 15: 21.0, 30: 27.0, 45: 30.0, 60: 33.0})
+    body = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "pickup": {"lat": 3.158, "lon": 101.7117},
+            "dropoff": {"lat": 3.1177, "lon": 101.6774}, "quotes": [{"app": "grab", "price_rm": 22.0}],
+            "usual_price_rm": 20.0}
+    d = client.post("/api/forecast", json=body).json()
+    assert d["traffic"]["source"] == "TomTom traffic prediction" and d["traffic"]["jam_ahead"]
+    assert any("TomTom traffic prediction" in r for r in d["reasons"])
+
+
+def test_no_tomtom_key_means_no_traffic(monkeypatch):
+    from api.traffic import predicted_minutes
+    monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
+    assert predicted_minutes((3.158, 101.7117), (3.1177, 101.6774), __import__("datetime").datetime.now()) is None

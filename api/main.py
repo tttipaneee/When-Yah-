@@ -1,7 +1,17 @@
 """When Yah? API. Run: uvicorn api.main:app --reload --port 8000"""
 import os
 
+from pathlib import Path
+
 from fastapi import FastAPI
+
+# load .env (e.g. TOMTOM_API_KEY) when started without scripts/run_demo.sh; never printed
+_env = Path(__file__).resolve().parent.parent / ".env"
+if _env.exists():
+    for _line in _env.read_text(encoding="utf-8").splitlines():
+        if "=" in _line and not _line.lstrip().startswith("#"):
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip().strip('"').strip("'"))
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.forecast import load_bundle

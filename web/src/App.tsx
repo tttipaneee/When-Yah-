@@ -81,7 +81,7 @@ export default function App() {
   var fsOpener=null,resOpener=null,zoneOpener=null,zoneBox=null;
   var WALK={n:"Sri Petaling",pct:-8,min:15};
   var state={from:"Axiata Arena",to:"KL Sentral",active:"from",prevFrom:null,
-    quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null};
+    quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null,toLatLon:null};
 
   function $(id){return document.getElementById(id)}
   function place(n){for(var i=0;i<PLACES.length;i++)if(PLACES[i].n===n)return PLACES[i];return PLACES[0]}
@@ -330,7 +330,7 @@ export default function App() {
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
-    runModel({from:state.from,fromLatLon:state.fromLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
+    runModel({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
       .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
