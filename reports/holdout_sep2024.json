@@ -1,0 +1,124 @@
+{
+ "source": "reports/holdout_sep2024.md",
+ "trips": 19189433,
+ "windows": 399055,
+ "verdicts": {
+  "V1_wait_saves": true,
+  "V2_vs_hour_of_day": "beats",
+  "V3_calibration_beats_base_rate": true,
+  "V4_high_prices_fall_back": true
+ },
+ "policies": [
+  {
+   "name": "Book now (always)",
+   "wait_rate": 0.0,
+   "saving": 0.0,
+   "saving_ci": [
+    0.0,
+    0.0
+   ],
+   "saving_when_wait": 0.0,
+   "waits_cost_more": 0.0
+  },
+  {
+   "name": "Hour-of-day average ratio (Aug train)",
+   "wait_rate": 0.3738,
+   "saving": 0.0003,
+   "saving_ci": [
+    0.00014,
+    0.00055
+   ],
+   "saving_when_wait": 0.0008,
+   "waits_cost_more": 0.467
+  },
+  {
+   "name": "When Yah? served Wait rule, no_level",
+   "wait_rate": 0.0466,
+   "saving": 0.00049,
+   "saving_ci": [
+    0.0004,
+    0.00056
+   ],
+   "saving_when_wait": 0.0104,
+   "waits_cost_more": 0.436
+  },
+  {
+   "name": "When Yah? served Wait rule, with_level",
+   "wait_rate": 0.1063,
+   "saving": 0.00328,
+   "saving_ci": [
+    0.00312,
+    0.00347
+   ],
+   "saving_when_wait": 0.0309,
+   "waits_cost_more": 0.381
+  }
+ ],
+ "vs_hour_of_day": [
+  0.00298,
+  0.00275,
+  0.0032
+ ],
+ "brier": [
+  0.1138,
+  0.11628
+ ],
+ "auc_30": 0.596,
+ "surge_ge_1_5": {
+  "windows": 6773,
+  "change_30": -0.04273567418306185,
+  "ci": [
+   -0.045923646468429516,
+   -0.03985962537341583
+  ],
+  "drop10_actual": 0.344012992765392,
+  "drop10_model": 0.3460847518805969
+ },
+ "calibration_with_level_30": [
+  {
+   "mean_predicted": 0.0835,
+   "observed": 0.0945,
+   "windows": 75961
+  },
+  {
+   "mean_predicted": 0.0908,
+   "observed": 0.0957,
+   "windows": 7648
+  },
+  {
+   "mean_predicted": 0.099,
+   "observed": 0.109,
+   "windows": 74361
+  },
+  {
+   "mean_predicted": 0.103,
+   "observed": 0.1165,
+   "windows": 25281
+  },
+  {
+   "mean_predicted": 0.1057,
+   "observed": 0.1192,
+   "windows": 16709
+  },
+  {
+   "mean_predicted": 0.115,
+   "observed": 0.1297,
+   "windows": 89950
+  },
+  {
+   "mean_predicted": 0.132,
+   "observed": 0.1421,
+   "windows": 38056
+  },
+  {
+   "mean_predicted": 0.1552,
+   "observed": 0.1675,
+   "windows": 31730
+  },
+  {
+   "mean_predicted": 0.2592,
+   "observed": 0.2597,
+   "windows": 39359
+  }
+ ]
+}
