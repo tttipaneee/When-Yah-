@@ -44,6 +44,7 @@ Fill in as they're created; keep them working.
 - Build dataset / train / evaluate: `python ml/build_dataset.py && python -m ml.train && python -m ml.evaluate` (→ `reports/metrics.md`)
 - Event effect: `python -m ml.event_effect` (→ `reports/event_effect.md`)
 - Trend experiment (second quote): `python -m ml.experiment_trend` (→ `reports/trend_experiment.md`)
+- Borough experiment: `python -m ml.experiment_borough` (→ `reports/borough_experiment.md`; zone→borough from `data/zones/taxi_zones_borough.csv`, NYC Open Data taxi zones export 2025-10-03)
 - API tests: `python -m pytest -q tests`
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
 
