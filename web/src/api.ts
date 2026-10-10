@@ -38,7 +38,14 @@ export interface ForecastResponse {
   reasons: string[]
   model_version: string
   usual_price_estimate: { rm: number; km: number; min: number; source: string } | null
+  walk_out?: WalkOut | null
   evidence: Record<string, string>
+}
+/** Option 2, only in the event exit window: walk past the ~1 km circle around the venue (no price %). */
+export interface WalkOut {
+  event: string; venue: string; source_url: string; end: string; ended: boolean
+  center: { lat: number; lon: number }; radius_km: number
+  target: { lat: number; lon: number } | null; walk_km: number | null
 }
 export interface EventItem {
   id: string; name: string; venue: string; lat: number; lon: number

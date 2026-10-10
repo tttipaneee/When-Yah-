@@ -134,7 +134,7 @@ export default function App() {
               L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
               L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
               OSRM_ROUTE = {min: Math.round(data.routes[0].duration / 60), km: data.routes[0].distance / 1000};
-              routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label
+              if(!WALK_FOCUS) routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label (not over the walk)
               showRouteStats();
            }
         }).catch(e => console.error(e));
@@ -159,10 +159,20 @@ export default function App() {
           drawBig(); syncFields(true); renderPrediction();
        });
     });
+    var wo = MODEL && MODEL.walk_out, wp = pickupLL();
+    if(wo && wo.target && wp) {  // Option 2: walk from the pickup to just outside the circle
+      L.polyline([[wp.lat, wp.lon], [wo.target.lat, wo.target.lon]], {color: "#101410", weight: 4, dashArray: "1 9", lineCap: "round"}).addTo(bigLayers);
+      L.circleMarker([wo.target.lat, wo.target.lon], {radius: 10, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 3}).addTo(bigLayers)
+        .bindTooltip("Check prices here", {permanent: true, direction: "top", className: "map-label", offset: [0, -12]});
+    }
     var ne = nearEvents()[0];
-    if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
+    if(WALK_FOCUS && wo && wo.target && wp) {  // opened from Option 2: just the circle, the pickup and the walk-out point
+      var wb = L.latLng(wo.center.lat, wo.center.lon).toBounds(wo.radius_km*2000).extend([wp.lat, wp.lon]).extend([wo.target.lat, wo.target.lon]);
+      bigMapL.fitBounds(wb, {paddingTopLeft: [30, 190], paddingBottomRight: [30, 290], maxZoom: 16});
+    } else if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
       var vb = L.latLngBounds([[a.lat, a.lon]]).extend(L.latLng(ne.lat, ne.lon).toBounds(HERE_KM*2000));
       if(b) vb.extend([b.lat, b.lon]);
+      if(wo && wo.target) vb.extend([wo.target.lat, wo.target.lon]);
       // keep clear of the search card + chip (top) and the place list sheet (bottom)
       bigMapL.fitBounds(vb, {paddingTopLeft: [30, 170], paddingBottomRight: [30, 290], maxZoom: 15});
     } else if(a) bigMapL.setView([a.lat, a.lon], 12);
@@ -234,7 +244,9 @@ export default function App() {
     $("fs").classList.add("on");$("phone").classList.add("mapopen");$("fs").setAttribute("aria-hidden","false");
     if(!noFocus)setTimeout(function(){var i=$(which==="from"?"qFrom":"qTo");i.focus({preventScroll:true});i.select()},240);
   }
+  var WALK_FOCUS=false;  // true while the full map was opened from Option 2
   function closeFs(noFocus){
+    WALK_FOCUS=false;
     $("phone").classList.remove("mapopen");$("fs").classList.remove("on");$("fs").setAttribute("aria-hidden","true");syncFields(true);
     if(!noFocus&&fsOpener&&document.body.contains(fsOpener))fsOpener.focus({preventScroll:true});
   }
@@ -421,7 +433,7 @@ export default function App() {
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Type at least one price on the home screen to compare your apps here.</div>';
-    renderChart();realOnly();aiReset();
+    renderChart();realOnly();renderWalk();aiReset();
   }
   var LAST_DK="";  // last verdict shown, so the card only "pops" when it changes
   // the verdict's one primary action: wait -> back to the price form to re-check later; book now -> the fare report card
@@ -430,7 +442,15 @@ export default function App() {
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
     setTimeout(function(){var a=$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
-  $("walkMap").onclick=function(){closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
+  // Option 2 shows only when the API returns walk_out: an event within 1 km of the pickup, from 30 min before
+  // to 45 min after its published end (the window validated on NYC data; not measured in Malaysia, so no %)
+  function renderWalk(){
+    var w=MODEL&&MODEL.walk_out;$("walkCard").hidden=!w;if(!w)return;
+    $("walkText").textContent=w.event+(w.ended?" ended at ":" ends at ")+klTime(w.end)+" near here. "+
+      (w.walk_km!=null?"Walk about "+w.walk_km+" km, out of the orange circle":"Walk out of the orange circle ("+w.radius_km+" km around "+w.venue+")")+
+      ", then check prices again.";
+  }
+  $("walkMap").onclick=function(){WALK_FOCUS=true;closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
   function countTo(el,to){  // ring number counts up instead of jumping
     if(to==null){el.textContent="–";el.dataset.v="";return}
     var from=parseInt(el.dataset.v||"0",10)||0;el.dataset.v=String(to);
@@ -962,7 +982,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="walk" aria-labelledby="walkT">
+        <section className="walk" id="walkCard" aria-labelledby="walkT" hidden>
           <svg className="walk-art" viewBox="0 0 64 64" aria-hidden="true">
             <circle cx="26" cy="32" r="20" fill="rgba(242,107,29,.18)" stroke="#F26B1D" strokeWidth="2" strokeDasharray="4 4"/>
             <circle cx="26" cy="32" r="4" fill="#F26B1D"/>
@@ -971,7 +991,7 @@ export default function App() {
           <div className="walk-txt">
             <div className="k">Option 2</div>
             <h2 id="walkT">Walk out of the zone</h2>
-            <p>Busy spot? Walk a few streets away, then check prices again.</p>
+            <p id="walkText"></p>
           </div>
           <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
         </section>

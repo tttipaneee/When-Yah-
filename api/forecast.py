@@ -7,6 +7,7 @@ Malaysian events are listed with their sources but never get a number (learned_e
 fed to the model: the validated effect in reports/event_effect.md is for NYC baseball at one venue only. If the model file is missing the API answers 503 (no placeholder numbers).
 """
 from datetime import timedelta
+import math
 import json
 from functools import lru_cache
 from zoneinfo import ZoneInfo
@@ -19,7 +20,8 @@ from fastapi import HTTPException
 from api.events import events_near, haversine_km
 from api.fare import estimate as fare_estimate
 from api.traffic import predicted_minutes, route_km_now
-from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
+from api.schemas import (ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, LatLon, TrafficInfo, WaitOdds,
+                         WalkOut)
 from ml.features import LEVEL_RANGE, serve_row
 from ml.train import MIN_WAIT_P, drop_prob
 
@@ -56,6 +58,29 @@ def decision_rule() -> dict:
     return json.loads(DECISION.read_text(encoding="utf-8"))
 
 
+def _walk_out(e, pickup: tuple[float, float], dropoff: tuple[float, float] | None, ended: bool) -> WalkOut:
+    """Point just outside the venue's circle: toward the drop-off if it is outside the circle (the walk is on the
+    way), else straight away from the venue through the pickup; none if the pickup is at the venue itself."""
+    if dropoff and haversine_km(e.lat, e.lon, *dropoff) > HERE_KM:
+        towards = dropoff
+    elif haversine_km(e.lat, e.lon, *pickup) > 0.05:
+        towards = pickup
+    else:
+        towards = None
+    target = walk_km = None
+    if towards:
+        lat1, lon1, lat2, lon2 = map(math.radians, (e.lat, e.lon, *towards))
+        brg = math.atan2(math.sin(lon2 - lon1) * math.cos(lat2),
+                         math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
+        d = WALK_OUT_KM / 6371.0
+        tlat = math.asin(math.sin(lat1) * math.cos(d) + math.cos(lat1) * math.sin(d) * math.cos(brg))
+        tlon = lon1 + math.atan2(math.sin(brg) * math.sin(d) * math.cos(lat1), math.cos(d) - math.sin(lat1) * math.sin(tlat))
+        target = LatLon(lat=round(math.degrees(tlat), 6), lon=round(math.degrees(tlon), 6))
+        walk_km = round(haversine_km(*pickup, target.lat, target.lon), 1)
+    return WalkOut(event=e.name, venue=e.venue, source_url=e.source_url, end=e.end, ended=ended,
+                   center=LatLon(lat=e.lat, lon=e.lon), radius_km=HERE_KM, target=target, walk_km=walk_km)
+
+
 def _rank(prices: dict[str, float]) -> list[str]:
     return sorted(prices, key=lambda a: prices[a])
 
@@ -81,6 +106,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
 HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's own NYC taxi zone where the effect was measured
+WALK_OUT_KM = HERE_KM + 0.2  # walk-out point: product choice, a little past the edge of that circle
 JAM_FACTOR = 1.25
 RISE_PCT = 0.015  # "edging up": expected rise at some horizon worth a "book now" note (product threshold)
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
@@ -219,7 +245,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
     pk = (req.pickup.lat, req.pickup.lon) if req.pickup else None
-    events, ev_reasons, exit_soon, exit_now = [], [], False, False
+    events, ev_reasons, exit_soon, exit_now, walk = [], [], False, False, None
     for e in nearby:
         km = round(haversine_km(pk[0], pk[1], e.lat, e.lon), 1) if pk else None
         lvl = None if km is None else ("right_here" if km <= HERE_KM else "in_area")
@@ -232,6 +258,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         to_end = (e.end - req.datetime).total_seconds() / 60 if e.end else None
         if eff and lvl == "right_here" and to_end is not None and -45 <= to_end <= 30:
             exit_soon, exit_now = exit_soon or to_end > 0, True
+            if walk is None:
+                walk = _walk_out(e, pk, (req.dropoff.lat, req.dropoff.lon) if req.dropoff else None, to_end <= 0)
             ev_reasons.append(
                 f"Event ending right here: {e.name} " + (f"ends at {e.end:%H:%M}" if to_end > 0 else
                                                          f"ended at {e.end:%H:%M}")
@@ -251,7 +279,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     urgency = ("wait" if wait else
                "urgent" if (traffic is not None and traffic.jam_ahead) or exit_soon or rising else "no_gain")
     return ForecastResponse(
-        situation=situation, urgency=urgency,
+        situation=situation, urgency=urgency, walk_out=walk,
         datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,
         expected_saving_rm=saving, risk_if_wait_rm=risk,

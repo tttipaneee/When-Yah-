@@ -261,3 +261,27 @@ def test_explain_rejects_invented_numbers_and_works_without_key(monkeypatch):
     monkeypatch.setattr(ex, "_ENV", "/nonexistent/.env")
     r = client.post("/api/explain", json={**BODY, "quotes": [{"app": "grab", "price_rm": 30.0}]}).json()
     assert r["ai"] is False and r["text"] is None
+
+
+def test_walk_out_only_in_exit_window_and_points_outside_the_circle():
+    from api.events import haversine_km
+    from api.forecast import event_effect, WALK_OUT_KM
+    zepp = {"lat": 3.1394413, "lon": 101.7091281}  # Eunji concert ends 23:00 on 11 Oct (published end)
+    sentral = {"lat": 3.1325847, "lon": 101.6879963}
+    near = {**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp, "dropoff": sentral}
+    early = client.post("/api/forecast", json={**near, "datetime": "2026-10-11T20:30:00+08:00"}).json()
+    late = client.post("/api/forecast", json={**near, "datetime": "2026-10-11T23:50:00+08:00"}).json()
+    assert early["walk_out"] is None and late["walk_out"] is None  # outside -30..+45 min of the end
+    if not event_effect():
+        return
+    w = client.post("/api/forecast", json=near).json()["walk_out"]
+    assert w and not w["ended"] and w["radius_km"] == 1.0
+    t, c = w["target"], w["center"]
+    assert abs(haversine_km(c["lat"], c["lon"], t["lat"], t["lon"]) - WALK_OUT_KM) < 0.01  # just past the circle
+    # toward the drop-off: the walk-out point is closer to KL Sentral than the venue is
+    assert haversine_km(t["lat"], t["lon"], sentral["lat"], sentral["lon"]) < haversine_km(c["lat"], c["lon"], sentral["lat"], sentral["lon"])
+    assert w["walk_km"] == round(haversine_km(zepp["lat"], zepp["lon"], t["lat"], t["lon"]), 1)
+    ended = client.post("/api/forecast", json={**near, "datetime": "2026-10-11T23:20:00+08:00"}).json()["walk_out"]
+    assert ended and ended["ended"]
+    no_dir = client.post("/api/forecast", json={**near, "dropoff": None}).json()["walk_out"]
+    assert no_dir and no_dir["target"] is None and no_dir["walk_km"] is None  # pickup at the venue, no drop-off

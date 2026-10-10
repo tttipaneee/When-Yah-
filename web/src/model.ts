@@ -30,8 +30,19 @@ export interface ModelInput {
   rain?: boolean
 }
 
+// Presenter override: ?at=2026-10-11T22:40 runs the forecast and today's events as if it were that KL time
+// (e.g. to show the event exit window before the event); without it, the real clock is used
+export function presenterAt(): string | null {
+  try {
+    const v = new URLSearchParams(window.location.search).get("at")
+    return v && /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v) ? v : null
+  } catch { return null }
+}
+
 function kualaLumpurNowIso(): string {
   // the API reads any timezone as KL time; send an explicit +08:00 timestamp
+  const at = presenterAt()
+  if (at) return `${at}:00+08:00`
   const kl = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 19)
   return `${kl}+08:00`
 }
@@ -86,7 +97,7 @@ export interface RealEvent {
 
 /** Real events today (KL date) from /api/events — every row has a source_url (data/events/malaysia_events.csv). */
 export function fetchEventsToday(): Promise<RealEvent[]> {
-  const klDate = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+  const klDate = presenterAt()?.slice(0, 10) ?? new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
   return fetch(`/api/events?date=${klDate}`).then((r) => (r.ok ? r.json() : []))
 }
 
