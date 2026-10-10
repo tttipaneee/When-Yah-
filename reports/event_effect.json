@@ -1,0 +1,6 @@
+{
+ "status": "VALIDATED",
+ "window": "0–45 min after end",
+ "pct": 0.13,
+ "pct_source": "train-period mean uplift (held-out confirmed)"
+}
