@@ -77,6 +77,9 @@ Fill in as they're created; keep them working.
   (product rule; below that, "book now") **and** the expected `pct_change` there is < 0 (product rule, 10 Oct: never
   "Wait" next to a rising line); `wait_minutes` = that horizon.
   A reason starting "Wait" gives the tested saving and how often waiting cost more.
+- `GET /api/route?from_lat&from_lon&to_lat&to_lon[&at]` → `{km, minutes, source}` (nulls without a TomTom key): trip time
+  with traffic for leaving now (or a future `at`), one TomTom call cached per minute, so the map shows it before any
+  forecast; after a forecast for the same route, the forecast's `traffic` is used. Minutes only.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
@@ -98,8 +101,18 @@ Fill in as they're created; keep them working.
   real users"), scored around the user's points at first look each week. Leaderboard friends map (3D, MapLibre +
   OpenFreeMap, lazy-loaded): example friends at **made-up** central-KL spots, labelled "Example friends at made-up places";
   "You" only at the typed pickup if within 3 km. No real location sharing.
-- Forecast page: Option 1 = verdict (Wait/Book now, one short line, ring); Option 2 = "Walk out of the zone" card
-  (design only, no numbers; "Show me on the map" opens the full-screen map; when to show it is logic still to come).
+- Forecast page: Option 1 = verdict (Wait/Book now, one short line, ring); Option 2 = "Walk out of the zone" card,
+  shown only when the forecast returns `walk_out` (else hidden).
+- Forecast `walk_out: {event, venue, source_url, end, ended, center: {lat, lon}, radius_km, target: {lat, lon} | null,
+  walk_km} | null`: only in the event exit window (a `right_here` event with a published `end`, from 30 min before to
+  45 min after it, same rule as the exit hint; needs `reports/event_effect.json` VALIDATED). `target` = a point
+  `HERE_KM + 0.2` km from the venue toward the drop-off (if outside the circle), else away from the venue through the
+  pickup, else `null`; `walk_km` = straight line pickup → target. Words + map only, never a price % (the post-event rise
+  is validated for NYC baseball only). "Show me on the map" zooms to the circle, pickup and a "Check prices here" point.
+  "Make this my pickup" (or tapping that point) moves the pickup there (street name from OSM Nominatim reverse lookup,
+  else "Walk-out point"), clears the typed prices (they were for the old spot) and returns to the price field.
+- Presenter time: `?at=YYYY-MM-DDTHH:MM` in the web URL runs the forecast and that day's events at that KL time
+  (e.g. `?at=2026-10-11T22:40` shows Option 2 for the Zepp KL concert ending 23:00).
 - `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-sonnet-5-5`, effort low, runs automatically as the "Why" text,
   server-side refusal fallback on) explains the server-recomputed forecast from a facts JSON only; any number in the
   answer that is not in the facts → rejected, `ai: false`. Needs `ANTHROPIC_API_KEY` in `.env`; without it `ai: false`.

@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, kmBetween, klTime } from "./model";
 import { runModel, explainForecast } from "./model";
 
 export default function App() {
@@ -98,32 +98,37 @@ export default function App() {
   }
   // Route time + distance: TomTom traffic-aware "leave now" (via /api/forecast) when the API has it,
   // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
-  var OSRM_ROUTE = null, routeLine = null, MODEL_ROUTE = "";
+  var OSRM_ROUTE = null, MODEL_ROUTE = "", ROUTE_NOW = null;  // ROUTE_NOW: {key, km, minutes, source} from /api/route
   function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
   function routeText(){
     var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
     if(t && t.minutes && t.minutes["0"] != null && t.km != null)
       return {html: "<b>" + Math.round(t.minutes["0"]) + " min</b> now with traffic · " + t.km.toFixed(1) + " km",
               src: "TomTom traffic prediction"};
+    var n = ROUTE_NOW && ROUTE_NOW.key === routeKey() && ROUTE_NOW.minutes != null && ROUTE_NOW;  // traffic now, before any forecast
+    if(n) return {html: "<b>" + Math.round(n.minutes) + " min</b> now with traffic · " + n.km.toFixed(1) + " km", src: n.source};
     if(OSRM_ROUTE) return {html: "<b>" + OSRM_ROUTE.min + " min</b> without traffic · " + OSRM_ROUTE.km.toFixed(1) + " km",
                            src: "OpenStreetMap route"};
     return null;
   }
   function showRouteStats(){
     var r = routeText(), rs = document.getElementById("routeStats");
+    // shown once, in the map's bottom panel with its source (a label on the line covered the place names)
     if(rs) rs.innerHTML = r ? '<span>' + r.html + ' <span style="opacity:.6">· ' + esc(r.src) + '</span></span>' : "";
-    if(routeLine){
-      routeLine.unbindTooltip();
-      if(r) routeLine.bindTooltip(r.html, {permanent: true, direction: "center", className: "map-label"}).openTooltip();
-    }
   }
+  var BASE_PLACES = Object.keys(PLACE_LATLON);  // the suggested places shipped with the app (before any search)
   function drawBig(){
     if(!bigLayers) return;
     bigLayers.clearLayers();
-    OSRM_ROUTE = null; routeLine = null; showRouteStats();
+    OSRM_ROUTE = null; showRouteStats();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
     if(a && b && state.from !== state.to) {
+      var rk = routeKey();
+      if(!ROUTE_NOW || ROUTE_NOW.key !== rk) {
+        ROUTE_NOW = {key: rk, minutes: null};
+        fetchRouteNow(a, b).then(function(d){ if(d && ROUTE_NOW && ROUTE_NOW.key === rk){ ROUTE_NOW = Object.assign({key: rk}, d); showRouteStats(); } });
+      }
       var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(bigLayers);
       fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
         .then(r => r.json())
@@ -134,7 +139,6 @@ export default function App() {
               L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
               L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
               OSRM_ROUTE = {min: Math.round(data.routes[0].duration / 60), km: data.routes[0].distance / 1000};
-              routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label
               showRouteStats();
            }
         }).catch(e => console.error(e));
@@ -146,23 +150,34 @@ export default function App() {
       mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
       mk.on("click", function(){ openZone($("zoneChip")); });
     });
-    Object.keys(PLACE_LATLON).forEach(name => {
+    // only the pickup and drop-off carry a label; the suggested places are small dots named on hover/tap,
+    // and search results never land here unless picked (they used to pile up as permanent labels)
+    BASE_PLACES.concat([state.from, state.to]).filter(function(n, i, all){ return PLACE_LATLON[n] && all.indexOf(n) === i; }).forEach(name => {
        var p = PLACE_LATLON[name];
-       var isFrom = name === state.from, isTo = name === state.to;
-       var color = (isFrom || isTo) ? "#C4F135" : "#fff";
-       var radius = (isFrom || isTo) ? 8 : 5;
-       var marker = L.circleMarker([p.lat, p.lon], {radius: radius, color: "#101410", fillColor: color, fillOpacity: 1, weight: 2}).addTo(bigLayers);
-       marker.bindTooltip(name, {permanent: true, direction: "top", className: "map-label", offset: [0, -10]});
+       var isFrom = name === state.from, isTo = name === state.to, sel = isFrom || isTo;
+       var marker = L.circleMarker([p.lat, p.lon], {radius: sel ? 8 : 5, color: "#101410", fillColor: sel ? "#C4F135" : "#fff", fillOpacity: 1, weight: 2}).addTo(bigLayers);
+       marker.bindTooltip(name, {permanent: sel, direction: "top", className: "map-label", offset: [0, -10]});
        marker.on("click", function() {
           if (state.active === "from") { state.prevFrom = state.from; state.from = name; }
           else { state.to = name; }
           drawBig(); syncFields(true); renderPrediction();
        });
     });
+    var wo = MODEL && MODEL.walk_out, wp = pickupLL();
+    if(wo && wo.target && wp) {  // Option 2: walk from the pickup to just outside the circle
+      L.polyline([[wp.lat, wp.lon], [wo.target.lat, wo.target.lon]], {color: "#101410", weight: 4, dashArray: "1 9", lineCap: "round"}).addTo(bigLayers);
+      L.circleMarker([wo.target.lat, wo.target.lon], {radius: 10, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 3}).addTo(bigLayers)
+        .bindTooltip("Check prices here · tap to set as pickup", {permanent: true, direction: "top", className: "map-label", offset: [0, -12]})
+        .on("click", function(){ useWalkOut(); });
+    }
     var ne = nearEvents()[0];
-    if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
+    if(WALK_FOCUS && wo && wo.target && wp) {  // opened from Option 2: just the circle, the pickup and the walk-out point
+      var wb = L.latLng(wo.center.lat, wo.center.lon).toBounds(wo.radius_km*2000).extend([wp.lat, wp.lon]).extend([wo.target.lat, wo.target.lon]);
+      bigMapL.fitBounds(wb, {paddingTopLeft: [30, 190], paddingBottomRight: [30, 290], maxZoom: 16});
+    } else if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
       var vb = L.latLngBounds([[a.lat, a.lon]]).extend(L.latLng(ne.lat, ne.lon).toBounds(HERE_KM*2000));
       if(b) vb.extend([b.lat, b.lon]);
+      if(wo && wo.target) vb.extend([wo.target.lat, wo.target.lon]);
       // keep clear of the search card + chip (top) and the place list sheet (bottom)
       bigMapL.fitBounds(vb, {paddingTopLeft: [30, 170], paddingBottomRight: [30, 290], maxZoom: 15});
     } else if(a) bigMapL.setView([a.lat, a.lon], 12);
@@ -234,7 +249,9 @@ export default function App() {
     $("fs").classList.add("on");$("phone").classList.add("mapopen");$("fs").setAttribute("aria-hidden","false");
     if(!noFocus)setTimeout(function(){var i=$(which==="from"?"qFrom":"qTo");i.focus({preventScroll:true});i.select()},240);
   }
+  var WALK_FOCUS=false;  // true while the full map was opened from Option 2
   function closeFs(noFocus){
+    WALK_FOCUS=false;
     $("phone").classList.remove("mapopen");$("fs").classList.remove("on");$("fs").setAttribute("aria-hidden","true");syncFields(true);
     if(!noFocus&&fsOpener&&document.body.contains(fsOpener))fsOpener.focus({preventScroll:true});
   }
@@ -245,7 +262,7 @@ export default function App() {
   function pick(name){
     state[state.active]=name;
     $(state.active==="from"?"qFrom":"qTo").value=name;
-    drawBig();
+    drawBig();renderRadar();  // the event chip follows the new pickup straight away
     if(state.active==="from"){setActive("to");$("qTo").focus({preventScroll:true});$("qTo").select()}
     else renderList("");
   }
@@ -421,7 +438,7 @@ export default function App() {
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Type at least one price on the home screen to compare your apps here.</div>';
-    renderChart();realOnly();aiReset();
+    renderChart();realOnly();renderWalk();aiReset();
   }
   var LAST_DK="";  // last verdict shown, so the card only "pops" when it changes
   // the verdict's one primary action: wait -> back to the price form to re-check later; book now -> the fare report card
@@ -430,7 +447,37 @@ export default function App() {
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
     setTimeout(function(){var a=$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
-  $("walkMap").onclick=function(){closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
+  // Option 2 shows only when the API returns walk_out: an event within 1 km of the pickup, from 30 min before
+  // to 45 min after its published end (the window validated on NYC data; not measured in Malaysia, so no %)
+  function renderWalk(){
+    var w=MODEL&&MODEL.walk_out;$("walkCard").hidden=!w;if(!w)return;
+    $("walkText").textContent=w.event+(w.ended?" ended at ":" ends at ")+klTime(w.end)+" near here. "+
+      (w.walk_km!=null?"Walk about "+w.walk_km+" km, out of the orange circle":"Walk out of the orange circle ("+w.radius_km+" km around "+w.venue+")")+
+      ", then check prices again.";
+  }
+  // "Make this my pickup": move the pickup to the walk-out point (named by OSM reverse lookup), clear the old
+  // prices (they were for the old spot) and go back to the price field to check the apps from there
+  var WALK_BUSY=false;
+  function useWalkOut(){
+    var w=MODEL&&MODEL.walk_out;if(!w||!w.target||WALK_BUSY)return;
+    WALK_BUSY=true;var t=w.target,done=false;
+    function apply(name){
+      if(done)return;done=true;WALK_BUSY=false;
+      PLACE_LATLON[name]={lat:t.lat,lon:t.lon};state.from=name;state.fromLatLon=null;
+      state.quotes=state.quotes.map(function(q){return {app:q.app,price:0}});
+      if($("fs").classList.contains("on"))closeFs(true);
+      closeRes(true);syncFields(true);renderQuotes();renderPrediction();drawBig();
+      setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},260);
+      toast("Pickup moved. Check your apps from there");
+    }
+    setTimeout(function(){apply("Walk-out point")},2500);  // no answer from the map service: plain name
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&zoom=17&lat="+t.lat+"&lon="+t.lon)
+      .then(function(r){return r.json()})
+      .then(function(d){var a=d&&d.address||{};apply(a.road||a.pedestrian||a.neighbourhood||(d&&d.name)||"Walk-out point")})
+      .catch(function(){apply("Walk-out point")});
+  }
+  $("walkUse").onclick=useWalkOut;
+  $("walkMap").onclick=function(){WALK_FOCUS=true;closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
   function countTo(el,to){  // ring number counts up instead of jumping
     if(to==null){el.textContent="–";el.dataset.v="";return}
     var from=parseInt(el.dataset.v||"0",10)||0;el.dataset.v=String(to);
@@ -578,7 +625,8 @@ export default function App() {
     FARE_KEY=key+quoted.join();
     var done=fareList().filter(function(f){return f.key===key})[0];
     if(done){el.innerHTML=fareThanks(done);return}
-    var apps=quoted.length?quoted:Object.keys(APP_NAME);
+    // all three apps (you may have booked on one you didn't quote); the ones you quoted first
+    var apps=quoted.concat(Object.keys(APP_NAME).filter(function(x){return quoted.indexOf(x)<0}));
     // same app switch + price-tag field as the home price card; saved in this browser only
     el.innerHTML='<form class="fare2" id="fareForm" novalidate><input type="hidden" id="fareApp" value="'+apps[0]+'">'+
       '<div class="qchips" role="group" aria-label="App you booked" style="grid-template-columns:repeat('+apps.length+',minmax(0,1fr))">'+apps.map(function(a,i){
@@ -962,7 +1010,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="walk" aria-labelledby="walkT">
+        <section className="walk" id="walkCard" aria-labelledby="walkT" hidden>
           <svg className="walk-art" viewBox="0 0 64 64" aria-hidden="true">
             <circle cx="26" cy="32" r="20" fill="rgba(242,107,29,.18)" stroke="#F26B1D" strokeWidth="2" strokeDasharray="4 4"/>
             <circle cx="26" cy="32" r="4" fill="#F26B1D"/>
@@ -971,9 +1019,12 @@ export default function App() {
           <div className="walk-txt">
             <div className="k">Option 2</div>
             <h2 id="walkT">Walk out of the zone</h2>
-            <p>Busy spot? Walk a few streets away, then check prices again.</p>
+            <p id="walkText"></p>
           </div>
-          <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
+          <div className="walk-acts">
+            <button className="walk-go" id="walkUse" type="button">Make this my pickup</button>
+            <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
+          </div>
         </section>
 
         <section className="card" aria-labelledby="rt">
@@ -1025,7 +1076,7 @@ export default function App() {
       <button className="fs-chip" id="zoneChip" type="button" aria-haspopup="dialog"><i></i><span id="chipText"></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <div className="fs-bottom">
         <p className="hint" id="hint">Choose pickup</p>
-          <div id="routeStats" className="caption" style={{ justifyContent: "center", margin: "4px 0" }}></div>
+        <div id="routeStats" className="route-stats"></div>
         <ul className="plist" id="plist"></ul>
         <button className="go" id="confirm" type="button">Confirm route</button>
       </div>

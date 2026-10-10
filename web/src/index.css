@@ -471,3 +471,12 @@ button.opt:active{transform:scale(.98)}
 .why-more .why-src{margin:0}
 .fare2{display:flex;flex-direction:column;gap:14px}
 .fare2 .qamt input{font-size:40px}
+.walk-acts{grid-column:1/-1;display:flex;flex-direction:column;gap:8px}
+.walk-acts .walk-btn{grid-column:auto}
+.walk-go{height:46px;border-radius:999px;background:var(--lime);color:var(--ink);font-weight:800;font-size:15px;border:2px solid var(--lime);transition:transform .12s}
+.walk-go:active{transform:scale(.98)}
+.walk-go:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+/* route time in the map's bottom panel (was a .caption, which is hidden on phones) */
+.route-stats{font-size:12.5px;font-weight:600;color:var(--ink);margin:0 4px}
+.route-stats:empty{display:none}
+.route-stats b{font-weight:800}
