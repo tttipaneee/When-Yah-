@@ -9,10 +9,11 @@ can't tell if the price will drop if they wait. Consumer groups say e-hailing fa
 rising without transparency (NST letter, 15 Feb 2026). Comparison apps exist overseas (Obi, Hackney,
 Bellhop) but not for Malaysian apps, and none clearly says *when* to book.
 
-**Solution (revised 10 Oct, after testing).** Like booking in Grab: the user picks Dari/Ke, types the
-price(s) their apps show and their usual price ("harga biasa"). When Yah? answers with **the odds that
-waiting 30 min gets a price ≥ 10% lower** ("Peluang harga turun ≥10%: 36% — biasa 12%"), the likely RM
-range per quoted app, book now or wait, and real events nearby (with sources).
+**Solution (revised 10 Oct, after testing).** Like booking in Grab: the user picks Dari (pickup) and
+types the price(s) their apps show. When Yah? answers with **the odds that waiting 30 min gets a price
+≥ 10% lower** ("Peluang harga turun ≥10%: 17% — biasa 12%"), the likely RM range per quoted app, book now
+or wait, and real events nearby (with sources). **Optional:** the usual price ("harga biasa") sharpens the
+odds when the fare is far above normal (≈2× usual → ~45%).
 
 **Proof.** On held-out real ride data (19M NYC Uber/Lyft trips, Aug 2024) the odds are **calibrated**
 (when we say ~21%, it happened 21% of the time) and rise sharply when the price is far above normal.
@@ -46,7 +47,7 @@ P0 = must work in demo · P1 = should · P2 = only if ahead.
 | FR1 | **"Masukkan harga yang anda nampak":** enter one or more real quotes (app + RM) and date/time | P0 |
 | FR2 | **When Yah? odds (headline):** chance waiting 30 min saves ≥10% vs the usual chance, p10–p90 RM range per quoted app; % change with band at +15/30/45/60; decision book_now/wait — `wait` only if the tested rule in `reports/decision.json` is validated; "Kenapa mahal?" line | P0 |
 | FR3 | Cheapest of the user's quoted apps now (all apps get the same % change — we have no per-app data) | P0 |
-| FR4 | **"Harga biasa"** (usual price) input — the model's key input; without it the odds stay near usual. Optional helper: estimate from route (Dari/Ke) only if `reports/fare_check.md` passes | **P0** |
+| FR4 | **Optional "harga biasa"** (usual price), prompted as "Tahu harga biasa? Masukkan untuk ramalan lebih tepat". Without it: time/day/rain/event odds (≈8–17%; best 10% of moments ≈21% observed vs 12% usual). With it: catches big surges (≈2× usual → ~45%). Route-based auto-estimate **rejected** — real Grab prices were 1.04–2.26× the published-rate formula (`reports/fare_check.md`) | P1 (recommended) |
 | FR5 | Event radar: real events near the pickup on the chosen date (with source link); learned effect shown only if validated in `reports/event_effect.md` | P0 (list) / P1 (effect) |
 | FR6 | Judges' metrics screen: policy savings vs baselines, P(drop) AUC, forecast error vs persistence, event-effect result | P0 (pitch) |
 | FR7 | Rain toggle that changes the forecast | P1 |
@@ -95,16 +96,18 @@ source (model metrics, user input, cited event page).
 | 06:00–08:30 | `submission-checker`; final test; submit | Rehearse ×3; final slides |
 
 ## 8. Demo script (2 minutes)
-1. Open the real Grab app (and inDrive) on stage; type Dari/Ke, the quotes and the usual price.
-2. Headline: "Peluang harga turun ≥10% jika tunggu 30 min: X% (biasa 12%)" + RM range per app.
+1. Open the real Grab app (and inDrive) on stage; type the pickup and the quotes → time-based odds.
+2. Add the usual price ("harga biasa") → the odds sharpen; headline "Peluang harga turun ≥10% jika tunggu
+   30 min: X% (biasa 12%)" + RM range per app.
 3. Event radar: a real event (with source) near the pickup.
 4. `/demo` jam scenario: 2× usual → odds ~4× usual; quiet scenario → odds below usual.
 5. Proof slide: calibration table + honest baselines + "what we tested and rejected" (trend, borough,
    traffic, event transfer) — tested on 19M real rides, audited twice for leakage.
 
 ## 9. Cut list (in order)
-1. FR10 geolocation 2. FR9 walk-out tip 3. Route-based usual-price estimate (FR4 helper)
-4. FR7 rain toggle 5. "Kenapa mahal?" line. Never cut: odds headline, harga biasa, events, `/demo`.
+1. FR10 geolocation 2. FR9 walk-out tip 3. FR7 rain toggle 4. "Kenapa mahal?" line
+5. FR4 harga biasa field (the app still works without it). Never cut: odds headline, events, `/demo`.
+(Route-based usual-price estimate: already rejected, `reports/fare_check.md`.)
 
 ## 10. Risks
 1. **Realised (10 Oct):** after removing a noise leak found by the leakage audit, the model does not beat
@@ -119,7 +122,8 @@ source (model metrics, user input, cited event page).
 5. inDrive is bid-based → the typed inDrive price is the rider's offer/accepted fare; treat it as a quote.
 
 ## 11. Roadmap slide
-Typed quotes become a Malaysian price dataset → model retrained on Malaysian data → screenshot reading
+Remember each user's own past prices on their phone (on-device, with consent) so "harga biasa" fills
+itself → typed quotes become a Malaysian price dataset → model retrained on Malaysian data → screenshot reading
 → official data partnerships (as Obi does in the US) → avatar guide → live traffic.
 
 ## 12. References

@@ -9,7 +9,7 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 
 ## What we're building
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
-drop if they wait. The user types the price(s) they see and their usual price; **When Yah?** gives the
+drop if they wait. The user types the price(s) they see (usual price optional); **When Yah?** gives the
 **calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
 per quoted app, book now or wait (wait only if a tested rule passes — currently it doesn't), and real
 events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
