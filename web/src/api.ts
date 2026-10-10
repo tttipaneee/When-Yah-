@@ -17,6 +17,10 @@ export interface WaitOdds {
   minutes: number; p_save10: number; typical_p_save10: number; pct_low: number; pct_high: number
   rm_range: Record<string, [number, number]>
 }
+export interface Outlook {
+  minutes: number; pct_change: number; pct_low: number; pct_high: number
+  because: string[]; model: string
+}
 export interface ForecastEvent {
   name: string; source_url: string
   learned_effect: { pct: number; window: string } | null
@@ -27,6 +31,7 @@ export interface ForecastResponse {
   datetime: string
   horizon: HorizonPoint[]
   wait_odds: WaitOdds
+  outlook?: Outlook | null
   decision: 'book_now' | 'wait'
   best_time: string
   wait_minutes: number

@@ -20,8 +20,9 @@ from fastapi import HTTPException
 from api.events import events_near, haversine_km
 from api.fare import estimate as fare_estimate
 from api.traffic import predicted_minutes, route_km_now
-from api.schemas import (ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, LatLon, TrafficInfo, WaitOdds,
-                         WalkOut)
+from api.schemas import (ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, LatLon, Outlook, TrafficInfo,
+                         WaitOdds, WalkOut)
+from ml import model_v2
 from ml.features import LEVEL_RANGE, serve_row
 from ml.train import MIN_WAIT_P, drop_prob
 
@@ -31,9 +32,25 @@ EFFECT_SUMMARY = ROOT / "reports" / "event_effect.json"
 HORIZONS = (15, 30, 45, 60)
 
 
+V2_PATH = ROOT / "ml" / "models" / "lgbm_v2.joblib"
+V2_VERDICT = ROOT / "reports" / "v2_verdict.json"
+
+
 @lru_cache(maxsize=1)
 def load_bundle() -> dict | None:
     return joblib.load(MODEL_PATH) if MODEL_PATH.exists() else None
+
+
+@lru_cache(maxsize=1)
+def load_v2() -> dict | None:
+    """Model v2 (price line + reasons), used per variant only where reports/v2_verdict.json says it beat v1 and
+    persistence on test days and September (ml/experiment_v2.py)."""
+    if not (V2_PATH.exists() and V2_VERDICT.exists()):
+        return None
+    verdict = json.loads(V2_VERDICT.read_text(encoding="utf-8")).get("verdict", {})
+    b = joblib.load(V2_PATH)
+    b["served"] = {v for v, ok in verdict.items() if ok}
+    return b if b["served"] else None
 
 
 def event_effect() -> dict | None:
@@ -85,8 +102,9 @@ def _rank(prices: dict[str, float]) -> list[str]:
     return sorted(prices, key=lambda a: prices[a])
 
 
-def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dict, str, float | None]:
-    """-> ({minutes: (pct, lo, hi, p_drop)}, variant, level)."""
+def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dict, str, float | None, list[str], str, dict]:
+    """-> ({minutes: (pct, lo, hi, p_drop)}, variant, level, v2 reasons, line model, {minutes: v1 pct}). P(drop) and
+    the v1 pct (used by the validated Wait rule) always from v1; the shown line (pct, lo, hi) from v2 where it passed."""
     b = load_bundle()
     level = None
     if req.usual_price_rm and quotes:
@@ -101,7 +119,19 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
         mean, lo, hi = (float(m[k].predict(X)[0]) for k in ("mean", "q10", "q90"))
         lo, hi = min(lo, mean), max(hi, mean)
         out[h] = (mean - 1, lo - 1, hi - 1, float(drop_prob(m, X)[0]))
-    return out, variant, level
+    v1_pct = {h: v[0] for h, v in out.items()}
+    v2, because, line = load_v2(), [], "lgbm_v1"
+    if v2 and variant in v2["served"]:
+        rows = model_v2.serve_rows(serve_row(req.datetime, req.rain, None, None, None), req.datetime,
+                                   v2["normal_table"], level)
+        for h in HORIZONS:
+            m, X2 = v2["models"][variant][h], rows[h][v2["features"][variant]]
+            mean, lo, hi = (float(a[0]) for a in model_v2.predict_line(m, X2))
+            out[h] = (mean - 1, lo - 1, hi - 1, out[h][3])
+            if h == 30:
+                because = model_v2.reason_words(model_v2.contributions(m["mean"], X2).iloc[0], X2.iloc[0])
+        line = "lgbm_v2"
+    return out, variant, level, because, line, v1_pct
 
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
@@ -129,7 +159,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     if load_bundle() is None:
         raise HTTPException(503, "model file ml/models/lgbm_v1.joblib missing — run python -m ml.train")
     nearest = min(nearby, key=lambda e: abs((e.start - req.datetime).total_seconds()), default=None)
-    pred, variant, level = _predict(req, quotes, nearest)
+    pred, variant, level, because, line_model, v1_pct = _predict(req, quotes, nearest)
 
     raw_p = {m: vals[3] for m, vals in pred.items()}  # unrounded P(drop) for the 20% minimum (same as ml.train.tunggu)
     pred = {m: tuple(round(v, 4) for v in vals) for m, vals in pred.items()}
@@ -142,6 +172,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
+    outlook = Outlook(minutes=30, pct_change=h30.pct_change, pct_low=h30.pct_low, pct_high=h30.pct_high,
+                      because=because, model=line_model)
     # "Wait" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
     # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (20%, product rule)
     # — only if that rule beat "book now" on held-out days.
@@ -152,7 +184,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     best = max(horizon, key=lambda h: mults[h.minutes])
     odds_high = k is not None and mults[best.minutes] >= k and raw_p[best.minutes] >= MIN_WAIT_P
     # product rule (10 Oct, same as ml/train.tunggu): never "Wait" while the expected price there is not below now
-    falling = best.pct_change < 0
+    falling = v1_pct[best.minutes] < 0  # v1's line: the rule exactly as validated (reports/decision.json)
     wait = bool(gate.get("validated")) and odds_high and falling
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
@@ -203,6 +235,10 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
                    f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
                    f"{odds.pct_low:+.0%} and {odds.pct_high:+.0%}")
+    if because:  # one-line prediction from model v2 (reports/metrics_v2.md)
+        size = "about the same" if abs(h30.pct_change) < 0.005 else f"likely {h30.pct_change:+.0%}"
+        reasons.append(f"Price in 30 min: {size} ({h30.pct_low:+.0%} to {h30.pct_high:+.0%}), "
+                       f"mainly because {' and '.join(because)} (main reasons in the model)")
     if variant == "with_level":
         clipped = " (clipped to the training range)" if not LEVEL_RANGE[0] <= level <= LEVEL_RANGE[1] else ""
         reasons.append(f"Your quote is {level - 1:+.0%} vs your usual price{clipped}")
@@ -226,7 +262,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         pass  # the traffic reason explains the book-now
     elif odds_high and not falling:
         reasons.append(f"Book now: the chance of a ≥10% drop by +{best.minutes} min is {best.p_drop10:.0%}, but the "
-                       f"expected price then is {best.pct_change:+.0%} — not lower than now (product rule; "
+                       f"Wait rule's expected price then is {v1_pct[best.minutes]:+.0%} — not lower than now (product rule; "
                        "not tested on held-out days)")
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
@@ -280,12 +316,13 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                "urgent" if (traffic is not None and traffic.jam_ahead) or exit_soon or rising else "no_gain")
     return ForecastResponse(
         situation=situation, urgency=urgency, walk_out=walk,
-        datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
+        datetime=req.datetime, horizon=horizon, wait_odds=odds, outlook=outlook, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,
         expected_saving_rm=saving, risk_if_wait_rm=risk,
         apps_ranked_now=_rank(quotes), apps_ranked_best_time=_rank(at_best),
         events=events, reasons=reasons,
-        model_version=f"lgbm_v1/{variant}",
+        model_version=f"lgbm_v1/{variant}" + ("+lgbm_v2_line" if line_model == "lgbm_v2" else ""),
         usual_price_estimate=est, traffic=traffic,
-        evidence={"metrics": "reports/metrics.md", "event_effect": "reports/event_effect.md"},
+        evidence={"metrics": "reports/metrics.md", "event_effect": "reports/event_effect.md",
+                  "line": "reports/metrics_v2.md"},
     )

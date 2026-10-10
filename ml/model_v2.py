@@ -71,6 +71,17 @@ def serve_rows(row: pd.DataFrame, local_dt, table: pd.Series, rel_level: float |
     return out
 
 
+def predict_line(m: dict, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """(mean, p10, p90) ratios. If m has "cal" (isotonic, fit on VAL days: predicted -> observed ratio), the mean is
+    mapped through it and the band shifted by the same amount (added 11 Oct after September showed the raw line
+    overstating big moves ~1.5x, reports/metrics_v2.md)."""
+    mean, lo, hi = m["mean"].predict(X), m["q10"].predict(X), m["q90"].predict(X)
+    if "cal" in m:
+        c = m["cal"].predict(mean)
+        lo, hi, mean = lo + (c - mean), hi + (c - mean), c
+    return mean, np.minimum(lo, mean), np.maximum(hi, mean)
+
+
 def contributions(model, X: pd.DataFrame) -> pd.DataFrame:
     """SHAP contribution per feature group (ratio units) for each row of X."""
     c = pd.DataFrame(model.predict(X, pred_contrib=True)[:, :-1], columns=list(X.columns), index=X.index)
@@ -78,16 +89,26 @@ def contributions(model, X: pd.DataFrame) -> pd.DataFrame:
                          any(f in c for f in fs)})
 
 
-WORDS = {("time", 1): "prices usually rise at this time of day",
-         ("time", -1): "prices usually ease at this time of day",
-         ("level", -1): "your price is above your usual, and high prices usually fall back",
-         ("level", 1): "your price is below your usual, and low prices usually creep back up",
-         ("rain", 1): "rain", ("rain", -1): "rain",
-         ("event", 1): "event timing nearby", ("event", -1): "event timing nearby"}
 MIN_CONTRIB = 0.003  # a group must move the prediction by >= 0.3 percentage points to be named
 
 
-def reason_words(contrib: pd.Series) -> list[str]:
-    """Top 1-2 groups by absolute contribution -> phrases (largest first)."""
-    top = contrib.abs().sort_values(ascending=False)
-    return [WORDS[(g, 1 if contrib[g] > 0 else -1)] for g in top.index[:2] if top[g] >= MIN_CONTRIB]
+def reason_words(contrib: pd.Series, row: pd.Series) -> list[str]:
+    """Top 1-2 groups by absolute contribution -> phrases (largest first). A group is named only when its words
+    are true for this row (rain only if raining; "above/below normal" only if the level pushes the same way)."""
+    out = []
+    for g in contrib.abs().sort_values(ascending=False).index:
+        c = contrib[g]
+        if abs(c) < MIN_CONTRIB or len(out) == 2:
+            break
+        if g == "time":
+            out.append("prices usually rise at this time of day" if c > 0 else "prices usually ease at this time of day")
+        elif g == "level" and "excess" in row:
+            if c < 0 and row.excess > 0:
+                out.append("your price is above normal for this time, and high prices usually fall back")
+            elif c > 0 and row.excess < 0:
+                out.append("your price is below normal for this time, and low prices usually creep back up")
+        elif g == "rain" and row.rain == 1:
+            out.append("it's raining")
+        elif g == "event" and row.event_nearby == 1:
+            out.append("event timing nearby")
+    return out

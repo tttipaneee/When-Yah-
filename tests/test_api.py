@@ -14,7 +14,7 @@ def test_forecast_contract_shape():
     d = r.json()
     assert [h["minutes"] for h in d["horizon"]] == [15, 30, 45, 60]
     assert d["decision"] in ("book_now", "wait")
-    assert d["model_version"] == "lgbm_v1/no_level"
+    assert d["model_version"].startswith("lgbm_v1/no_level")
     assert set(d["horizon"][0]["expected_rm"]) == {"grab", "indrive"}
     assert set(d["apps_ranked_now"]) == {"grab", "indrive"}
 
@@ -38,7 +38,7 @@ def test_events_and_metrics():
 
 def test_usual_price_uses_with_level_and_rm_only_from_quotes():
     d = client.post("/api/forecast", json={**BODY, "usual_price_rm": 25.0}).json()
-    assert d["model_version"] == "lgbm_v1/with_level"
+    assert d["model_version"].startswith("lgbm_v1/with_level")
     for h in d["horizon"]:
         assert h["pct_low"] <= h["pct_change"] <= h["pct_high"]
         assert h["expected_rm"]["grab"] == round(38.0 * (1 + h["pct_change"]), 2)
@@ -88,7 +88,7 @@ def test_usual_price_estimate_only_when_fare_check_passed():
     body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
     d = client.post("/api/forecast", json=body).json()
     if not check().get("passed"):
-        assert d["usual_price_estimate"] is None and d["model_version"] == "lgbm_v1/no_level"
+        assert d["usual_price_estimate"] is None and d["model_version"].startswith("lgbm_v1/no_level")
 
 
 def test_metrics_structured_for_judges_screen():
@@ -299,3 +299,18 @@ def test_route_now_for_the_map(monkeypatch):
     monkeypatch.setattr(t, "route_with_traffic", lambda a, b, d=None, timeout=8: None)  # no key / error
     assert client.get(f"/api/route?{q}").json() == {"km": None, "minutes": None, "source": None}
     rf._route_now.cache_clear()
+
+
+def test_outlook_matches_horizon_and_follows_v2_verdict():
+    import json
+    from pathlib import Path
+    d = client.post("/api/forecast", json={**BODY, "usual_price_rm": 25.0}).json()
+    o, h30 = d["outlook"], next(h for h in d["horizon"] if h["minutes"] == 30)
+    assert (o["pct_change"], o["pct_low"], o["pct_high"]) == (h30["pct_change"], h30["pct_low"], h30["pct_high"])
+    p = Path(__file__).resolve().parent.parent / "reports" / "v2_verdict.json"
+    served = p.exists() and json.loads(p.read_text(encoding="utf-8"))["verdict"].get("with_level")
+    assert o["model"] == ("lgbm_v2" if served else "lgbm_v1")
+    if o["because"]:  # words only, never "traffic" (reports/traffic_experiment.md)
+        assert not any("traffic" in w for w in o["because"])
+        assert d["reasons"][1].startswith("Price in 30 min")
+    assert d["reasons"][0].startswith("Chance that waiting 30 min")  # contract: reasons[0] = the odds

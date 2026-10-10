@@ -13,6 +13,10 @@ Rule (fixed in this file and committed BEFORE the first run):
   The mean-model objective (l2 or l1) is chosen on VAL MAE (with_level, +30) before looking at test or September.
 Also reported (no verdict): MAE at every horizon, p10-p90 band coverage, ablation by feature group, and how big
 predicted moves (|pred| >= 5%) turned out.
+Added 11 Oct AFTER the first run (post hoc, disclosed in the report): the first run showed the raw line overstating
+big moves on September (predicted -17% -> actual median -11%). An isotonic map predicted -> observed ratio is fit on
+VAL days per variant/horizon. The calibrated line is served only if it passes the SAME rule above on test days and
+September; otherwise the raw v2 line (if it passed) is served.
 Usage: python -m ml.experiment_v2 [data/raw/fhvhv_tripdata_2024-09.parquet]
 """
 import json
@@ -23,6 +27,7 @@ from pathlib import Path
 
 import joblib
 import lightgbm as lgb
+from sklearn.isotonic import IsotonicRegression
 import numpy as np
 import pandas as pd
 
@@ -87,12 +92,20 @@ def score(df: pd.DataFrame, v1: dict, models: dict, table, zmed, label: str) -> 
             y = df[f"ratio_{h}"].to_numpy()
             X = V.add_v2(df, h, table, zmed)[V.VARIANTS[name]]
             m = models[name][h]
-            p2, lo, hi = m["mean"].predict(X), m["q10"].predict(X), m["q90"].predict(X)
-            e0, e1, e2 = np.abs(y - 1), np.abs(y - p1[:, i]), np.abs(y - p2)
-            res["mae"][(name, h)] = (e0.mean(), e1.mean(), e2.mean())
-            res["coverage"][(name, h)] = float(((y >= np.minimum(lo, p2)) & (y <= np.maximum(hi, p2))).mean())
+            p2 = m["mean"].predict(X)
+            p2c, lo, hi = V.predict_line(m, X)
+            e0, e1, e2, e2c = np.abs(y - 1), np.abs(y - p1[:, i]), np.abs(y - p2), np.abs(y - p2c)
+            res["mae"][(name, h)] = (e0.mean(), e1.mean(), e2.mean(), e2c.mean())
+            res["coverage"][(name, h)] = float(((y >= lo) & (y <= hi)).mean())
             if h == 30:
                 res["diff30"][name] = {"vs_v1": paired(e2, e1, clusters), "vs_persistence": paired(e2, e0, clusters)}
+                res.setdefault("diff30_cal", {})[name] = {"vs_v1": paired(e2c, e1, clusters),
+                                                          "vs_persistence": paired(e2c, e0, clusters)}
+                if name == "with_level":
+                    t = pd.DataFrame({"raw": p2 - 1, "cal": p2c - 1, "y": y - 1})
+                    g = t.groupby(pd.cut(t.raw, [-1, -.15, -.10, -.05, -.02, .02, .05, 1]), observed=True)
+                    res["calib"] = [(str(k), len(d), d.raw.median(), d.cal.median(), d.y.median()) for k, d in g]
+                p2 = p2c  # big-move stats on the line as served
                 big = np.abs(p2 - 1) >= 0.05
                 res["big"][name] = {"n": int(big.sum()), "share": float(big.mean()),
                                     "pred_mean": float((p2[big] - 1).mean()) if big.any() else None,
@@ -103,12 +116,13 @@ def score(df: pd.DataFrame, v1: dict, models: dict, table, zmed, label: str) -> 
     return res
 
 
-def passes(r: dict, name: str) -> bool:
-    d = r["diff30"][name]
+def passes(r: dict, name: str, key: str = "diff30") -> bool:
+    d = r[key][name]
     return d["vs_v1"][2] < 0 and d["vs_persistence"][2] < 0
 
 
 def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")
     sep_path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data" / "raw" / "fhvhv_tripdata_2024-09.parquet"
     aug = load_frame()
     tr, va, te = (aug[aug.split == s] for s in ("train", "val", "test"))
@@ -125,6 +139,11 @@ def main() -> None:
     print(f"val MAE @30 with_level: {val_mae} -> objective {objective}")
 
     models = fit_v2(tr, table, zmed, objective)
+    for name, feats in V.VARIANTS.items():  # post-hoc calibration, VAL days only (see docstring)
+        for h in HORIZONS:
+            dv_h = V.add_v2(va[va[f"ratio_{h}"].notna()], h, table, zmed)
+            m = models[name][h]
+            m["cal"] = IsotonicRegression(out_of_bounds="clip").fit(m["mean"].predict(dv_h[feats]), dv_h[f"ratio_{h}"])
     r_test = score(te, v1, models, table, zmed, "test Aug 26-31")
     sep = sep_frame(sep_path)
     r_sep = score(sep, v1, models, table, zmed, "September 2024")
@@ -136,11 +155,18 @@ def main() -> None:
         keep = [f for f in V.V2_WITH_LEVEL if f not in fs]
         m = lgb.LGBMRegressor(objective=objective, **PARAMS).fit(d[keep], d.ratio_30)
         abl[g] = float(np.abs(dt.ratio_30 - m.predict(dt[keep])).mean())
-    abl["(none dropped)"] = r_test["mae"][("with_level", 30)][2]
+    abl["(none dropped)"] = float(np.abs(dt.ratio_30 - models["with_level"][30]["mean"].predict(dt[V.V2_WITH_LEVEL])).mean())
+    abl["(persistence, ratio = 1)"] = float(np.abs(dt.ratio_30 - 1).mean())
 
     verdict = {name: bool(passes(r_test, name) and passes(r_sep, name)) for name in V.VARIANTS}
+    calibrated = {name: bool(passes(r_test, name, "diff30_cal") and passes(r_sep, name, "diff30_cal"))
+                  for name in V.VARIANTS}
+    for name in V.VARIANTS:
+        if not calibrated[name]:
+            for h in HORIZONS:
+                models[name][h].pop("cal", None)
     bundle = {"version": "lgbm_v2", "horizons": HORIZONS, "features": V.VARIANTS, "models": models,
-              "normal_table": table, "objective": objective, "verdict": verdict,
+              "normal_table": table, "objective": objective, "verdict": verdict, "calibrated": calibrated,
               "trained_on": "NYC HVFHV zone x 15-min windows, Aug 1-21 2024"}
     joblib.dump(bundle, OUT_MODEL, compress=3)
 
@@ -148,8 +174,9 @@ def main() -> None:
         rows = []
         for name in V.VARIANTS:
             for h in HORIZONS:
-                p, a, b = r["mae"][(name, h)]
-                rows.append(f"| {name} | +{h} | {p:.4f} | {a:.4f} | {b:.4f} | {(b / a - 1):+.1%} | {r['coverage'][(name, h)]:.1%} |")
+                p, a, b, c = r["mae"][(name, h)]
+                rows.append(f"| {name} | +{h} | {p:.4f} | {a:.4f} | {b:.4f} | {c:.4f} | {(b / a - 1):+.1%} | "
+                            f"{r['coverage'][(name, h)]:.1%} |")
         return rows
 
     def diff_lines(r):
@@ -158,6 +185,9 @@ def main() -> None:
             a, b = r["diff30"][name]["vs_v1"], r["diff30"][name]["vs_persistence"]
             out.append(f"- {name}: v2 − v1 {a[0]:+.5f} (95% CI {a[1]:+.5f} … {a[2]:+.5f}); "
                        f"v2 − persistence {b[0]:+.5f} ({b[1]:+.5f} … {b[2]:+.5f}) → {'passes' if passes(r, name) else 'fails'}")
+            a, b = r["diff30_cal"][name]["vs_v1"], r["diff30_cal"][name]["vs_persistence"]
+            out.append(f"  - calibrated: v2 − v1 {a[0]:+.5f} ({a[1]:+.5f} … {a[2]:+.5f}); v2 − persistence {b[0]:+.5f} "
+                       f"({b[1]:+.5f} … {b[2]:+.5f}) → {'passes' if passes(r, name, 'diff30_cal') else 'fails'}")
         return out
 
     def big_lines(r):
@@ -172,8 +202,12 @@ def main() -> None:
         return out
 
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-    head = ["| Variant | Horizon | MAE persistence | MAE v1 | MAE v2 | v2 vs v1 | v2 p10–p90 coverage |",
-            "|---|---|---|---|---|---|---|"]
+    head = ["| Variant | Horizon | MAE persistence | MAE v1 | MAE v2 raw | MAE v2 calibrated | raw v2 vs v1 | "
+            "served band p10–p90 coverage |", "|---|---|---|---|---|---|---|---|"]
+
+    def calib_rows(r):
+        return ["| Raw prediction | Windows | Raw median | Calibrated median | Actual median |", "|---|---|---|---|---|",
+                *[f"| {k} | {n:,} | {a:+.1%} | {b:+.1%} | {c:+.1%} |" for k, n, a, b, c in r["calib"]]]
     L = ["# Model v2 — price line from 'normal for this time' + 'how far off normal now'", "",
          f"Generated by `python -m ml.experiment_v2` on {date.today().isoformat()} (code at commit `{commit}`; rule fixed "
          "in the code before the first run). Data: NYC TLC HVFHV, train Aug 1–21 2024, val Aug 22–25, test Aug 26–31, "
@@ -183,12 +217,16 @@ def main() -> None:
          f"Mean-model objective chosen on val: **{objective}** (val MAE @30: " +
          ", ".join(f"{k} {v:.4f}" for k, v in val_mae.items()) + ").", "",
          "## Verdict (rule in the code)",
-         *[f"- **{n}: {'v2 REPLACES the v1 line' if ok else 'v2 does NOT beat v1 — keep v1'}**" for n, ok in verdict.items()],
+         *[f"- **{n}: {'v2 REPLACES the v1 line' if ok else 'v2 does NOT beat v1 — keep v1'}**"
+           + (f" — served {'calibrated' if calibrated[n] else 'raw'}" if ok else "") for n, ok in verdict.items()],
          "- The Wait / Book now decision is unchanged (v1's validated rule).", "",
          f"## Test days Aug 26–31 ({r_test['windows']:,} windows)", *diff_lines(r_test), "", *head, *mae_rows(r_test), "",
          f"## September 2024 ({r_sep['windows']:,} windows)", *diff_lines(r_sep), "", *head, *mae_rows(r_sep), "",
-         "## Big predicted moves (+30 min)", "Test days:", *big_lines(r_test), "September:", *big_lines(r_sep), "",
-         "## Ablation (test, with_level +30, MAE when one group is left out)", "",
+         "## Does the predicted size match reality? (with_level +30, by raw prediction)",
+         "Calibration (isotonic, fit on val days) was added after the first run showed the raw line overstating big moves.",
+         "", "Test days:", "", *calib_rows(r_test), "", "September:", "", *calib_rows(r_sep), "",
+         "## Big predicted moves (+30 min, line as served)", "Test days:", *big_lines(r_test), "September:", *big_lines(r_sep), "",
+         "## Ablation (test windows with a +30 outcome, with_level +30, MAE when one group is left out)", "",
          "| Left out | MAE |", "|---|---|", *[f"| {g} | {m:.4f} |" for g, m in abl.items()], "",
          "## Normal for this time (share of the place's usual price, train days)", "",
          "| Hour | Weekday | Weekend |", "|---|---|---|",
@@ -200,6 +238,7 @@ def main() -> None:
          "- Still New York data; in Malaysia the place's usual price is the usual price the user types."]
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     VERDICT.write_text(json.dumps({"source": "reports/metrics_v2.md", "objective": objective, "verdict": verdict,
+                                   "calibrated": calibrated,
                                    "test": {n: r_test["diff30"][n] for n in V.VARIANTS},
                                    "september": {n: r_sep["diff30"][n] for n in V.VARIANTS},
                                    "big_moves": {"test": r_test["big"], "september": r_sep["big"]},
