@@ -340,7 +340,7 @@ export default function App() {
     $("opts").querySelectorAll('[data-go="transit"]').forEach(function(n){n.remove()});
     var wc=$("wt").closest(".card"),tg=wc&&wc.querySelector(".tag");if(tg)tg.hidden=true;
     if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
-    var html=MODEL.reasons.map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
+    var html=MODEL.reasons.filter(function(t){return t.indexOf("Event nearby:")!==0}).map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
     html+=MODEL.events.map(function(e){return '<div><div class="why-top"><span>Event nearby: '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured for Malaysian events</div></div>'}).join("");
     html+='<div class="why-src">Source: '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
     $("why").innerHTML=html;
@@ -359,8 +359,9 @@ export default function App() {
     rows.sort(function(a,b){return a.later-b.later});
     $("rank").innerHTML=rows.length?rows.map(function(r,i){
       var ini=r.app==="Other app"?"?":r.app.charAt(0).toUpperCase()+(r.app==="GV Ride"?"V":r.app==="inDrive"?"D":"");
-      return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?"Cheapest at "+hhmm(bestMin):"Now "+rm(r.now))+'</small></span>'+
-        '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>';
+      return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):"Now "+rm(r.now))+'</small></span>'+
+        (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
+        '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
     renderChart();renderWalk();renderTransit();renderOpts();renderWhy();realOnly();
   }
