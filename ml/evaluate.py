@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
 
 from ml.features import HORIZONS
-from ml.train import MODEL, drop_prob, load_frame
+from ml.train import MODEL, drop_prob, load_frame, odds_multiples, tunggu
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.md"
@@ -84,12 +84,11 @@ def main() -> None:
     rows["Linear on level (1/level)"] = policy_stats(*decide(lin, None), actual, clusters)
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
-    # "Tunggu" odds rule (served): wait 30 min when P(drop >= 10% @30) >= k x usual chance; k picked on val
+    # "Tunggu" odds rule (served): wait for the horizon with the best odds multiple if >= k; k picked on val
     odds_wait = {}
     for v in preds:
         k = b.get("wait_k", {}).get(v)
-        w = preds[v]["p"][:, 1] >= k * b["base_rate"][30] if k else np.zeros(len(te), bool)
-        odds_wait[v] = (w, np.full(len(te), 1))  # horizon index 1 = +30 min
+        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k)
         rows[f"When Yah? {v}, odds rule (k={k})"] = policy_stats(*odds_wait[v], actual, clusters)
     oracle_best = actual.argmin(axis=1)
     rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
@@ -103,6 +102,7 @@ def main() -> None:
                            "When Yah? no_level": decide(preds["no_level"]["mean"], preds["no_level"]["q90"]),
                            "When Yah? with_level": decide(preds["with_level"]["mean"], preds["with_level"]["q90"]),
                            "When Yah? with_level, odds rule": odds_wait["with_level"],
+                           "When Yah? no_level, odds rule": odds_wait["no_level"],
                            }.items():
         surge_rows[name] = policy_stats(w[surge], bst[surge], actual[surge], clusters[surge])
 
@@ -190,12 +190,35 @@ def main() -> None:
           "  rider's band and drop chances may differ (likely a narrower band).",
           "- Patterns are learned in New York (Aug 2024) and applied to the user's local clock in Klang Valley.",
           "  They are not Malaysian data; typed quotes would become Malaysian training data (roadmap)."]
-    odr, ho_ = rows[f"When Yah? with_level, odds rule (k={b['wait_k']['with_level']})"], rows["Hour-of-day average ratio"]
-    validated = odr["lo"] > ho_["hi"] and odr["lo"] > 0
-    L += [f"- **\"Tunggu\" odds rule** (wait 30 min when the drop chance ≥ {b['wait_k']['with_level']}× usual; k picked on val): "
-          f"saving {pct(odr['saving'])} vs hour-of-day {pct(ho_['saving'])} → "
-          + ("**beats both baselines; the app may advise waiting.**" if validated else
-             "**does not beat the hour-of-day baseline; the app always says book now and shows the odds as information.**")]
+    ho_ = rows["Hour-of-day average ratio"]
+    hi15 = te.level.to_numpy() >= 1.5
+    decision = {"rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual "
+                        "chance) if it is >= k; k picked on val days",
+                "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
+                "test_days": "2024-08-26..2024-08-31", "variants": {}}
+    for v in preds:
+        kv = b["wait_k"][v]
+        r_ = rows[f"When Yah? {v}, odds rule (k={kv})"]
+        w_, h_ = odds_wait[v]
+        s15 = policy_stats(w_[hi15], h_[hi15], actual[hi15], clusters[hi15])
+        ok = bool(kv is not None and r_["lo"] > 0)
+        verdict_hour = ("beats" if r_["lo"] > ho_["hi"] else "loses to" if r_["hi"] < ho_["lo"] else "ties")
+        decision["variants"][v] = {
+            "validated": ok, "k": kv, "test_saving": round(float(r_["saving"]), 5),
+            "test_saving_ci": [round(float(r_["lo"]), 5), round(float(r_["hi"]), 5)],
+            "wait_rate": round(float(r_["wait_rate"]), 4),
+            "saving_when_wait": round(float(r_["saving_when_wait"]), 4),
+            "waits_cost_more": round(float(r_["worse_share_of_waits"]), 3),
+            "level_ge_1_5": {"windows": int(hi15.sum()), "saving": round(float(s15["saving"]), 4),
+                             "saving_ci": [round(float(s15["lo"]), 4), round(float(s15["hi"]), 4)],
+                             "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3)},
+            "vs_hour_of_day": verdict_hour}
+        L += [f"- **\"Tunggu\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual; k picked on val): saving "
+              f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
+              + ("**beats book now: the app may say \"Tunggu\"**" if ok else "**does not beat book now: the app says book now**")
+              + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}). When it waits it saves "
+              f"{pct(r_['saving_when_wait'])} on average and {r_['worse_share_of_waits']:.0%} of waits cost more. "
+              f"When the price is ≥ 1.5× usual: {pct(s15['saving'])} ({pct(s15['lo'])} … {pct(s15['hi'])})."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}
                   for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]
@@ -207,10 +230,7 @@ def main() -> None:
         "auc_drop10_30": {v: round(float(roc_auc_score((actual[:, 1] <= 0.9).astype(int), preds[v]["p"][:, 1])), 3)
                           for v in preds},
         "calibration_with_level_30": calib_rows}, indent=1), encoding="utf-8")
-    (ROOT / "reports" / "decision.json").write_text(json.dumps(
-        {"validated": bool(validated), "rule": "wait 30 min if P(drop>=10% @30) >= k x usual",
-         "k": b["wait_k"]["with_level"], "test_saving": round(float(odr["saving"]), 5),
-         "hour_of_day_saving": round(float(ho_["saving"]), 5)}, indent=1), encoding="utf-8")
+    (ROOT / "reports" / "decision.json").write_text(json.dumps(decision, indent=1), encoding="utf-8")
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 

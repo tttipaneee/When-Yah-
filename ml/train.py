@@ -54,16 +54,30 @@ def drop_prob(m: dict, X) -> np.ndarray:
 K_GRID = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)
 
 
+def odds_multiples(bundle: dict, name: str, X) -> np.ndarray:
+    """(n, 4): calibrated P(drop >= 10%) at +15/30/45/60 divided by the usual (train) chance at that horizon."""
+    ms = bundle["models"][name]
+    return np.c_[[drop_prob(ms[h], X) / bundle["base_rate"][h] for h in HORIZONS]].T
+
+
+def tunggu(mult: np.ndarray, k: float | None) -> tuple[np.ndarray, np.ndarray]:
+    """"Tunggu" rule: wait for the horizon with the best odds multiple, if it is >= k. -> (wait, horizon index)."""
+    best = mult.argmax(axis=1)
+    if k is None:
+        return np.zeros(len(mult), bool), best
+    return mult[np.arange(len(mult)), best] >= k, best
+
+
 def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
-    """"Tunggu" rule: wait 30 min when P(drop >= 10% at +30) >= k x the usual chance. k is picked on VAL days
-    (highest mean saving vs book now); None (= never advise waiting) if no k saves money on val."""
-    v = va[va.ratio_30.notna()]
-    p = drop_prob(bundle["models"][name][30], v[bundle["features"][name]])
-    base = bundle["base_rate"][30]
+    """Pick k for the "Tunggu" rule on VAL days (highest mean saving vs book now, waiting at the chosen
+    horizon); None (= never advise waiting) if no k saves money on val."""
+    v = va.dropna(subset=[f"ratio_{h}" for h in HORIZONS])
+    actual = v[[f"ratio_{h}" for h in HORIZONS]].to_numpy()
+    mult = odds_multiples(bundle, name, v[bundle["features"][name]])
     best, best_saving = None, 0.0
     for k in K_GRID:
-        wait = p >= k * base
-        saving = float(np.where(wait, 1 - v.ratio_30.to_numpy(), 0.0).mean())
+        wait, h = tunggu(mult, k)
+        saving = float(np.where(wait, 1 - actual[np.arange(len(v)), h], 0.0).mean())
         print(f"  {name} k={k}: val waits {wait.mean():.2%}, mean saving {saving:+.3%}")
         if saving > best_saving:
             best, best_saving = k, saving

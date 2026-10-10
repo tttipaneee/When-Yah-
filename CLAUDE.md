@@ -11,7 +11,7 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
 drop if they wait. The user types the price(s) they see (usual price optional); **When Yah?** gives the
 **calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
-per quoted app, book now or wait (wait only if a tested rule passes — currently it doesn't), and real
+per quoted app, "Tunggu X min" or book now (tested rule: beats book-now, ties hour-of-day), and real
 events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
 
 ## The evidence rule — never break it
@@ -71,8 +71,9 @@ Fill in as they're created; keep them working.
 ```
 - **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
-- `decision` = `wait` (30 min) only if `reports/decision.json` has `validated: true` **and** the odds are ≥ k × usual;
-  currently not validated, so always `book_now` (reasons explain why).
+- `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
+  CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k; `wait_minutes` = that horizon.
+  A reason starting "Tunggu" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.

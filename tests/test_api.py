@@ -93,5 +93,20 @@ def test_usual_price_estimate_only_when_fare_check_passed():
 
 def test_metrics_structured_for_judges_screen():
     d = client.get("/api/metrics").json()
-    assert d["structured"]["calibration_with_level_30"] and d["decision"]["validated"] in (True, False)
+    assert d["structured"]["calibration_with_level_30"]
+    assert all(v["validated"] in (True, False) for v in d["decision"]["variants"].values())
     assert "trend_experiment" in d["experiments"]
+
+
+def test_tunggu_only_when_rule_validated_and_odds_high():
+    from api.forecast import decision_rule
+    jam = {**BODY, "datetime": "2026-10-16T18:10:00+08:00", "quotes": [{"app": "grab", "price_rm": 40.0}],
+           "usual_price_rm": 20.0}
+    d = client.post("/api/forecast", json=jam).json()
+    gate = decision_rule().get("variants", {}).get("with_level", {})
+    if d["decision"] == "wait":
+        assert gate.get("validated") and d["wait_minutes"] in (15, 30, 45, 60)
+        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Tunggu") for r in d["reasons"])
+    quiet = {**BODY, "datetime": "2026-10-13T14:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 12.0}],
+             "usual_price_rm": 15.0}
+    assert client.post("/api/forecast", json=quiet).json()["decision"] == "book_now"

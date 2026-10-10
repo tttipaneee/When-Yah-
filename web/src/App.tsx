@@ -349,8 +349,10 @@ export default function App() {
     if(!fromModel)requestModel();
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
-    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
+    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Tunggu "+bestMin+" min":"Tempah sekarang";
+    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Tunggu")===0})[0]:null;
     $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
+      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Tunggu \d+ min: /,""))+".":
       "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
     $("bestAt").textContent=hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";

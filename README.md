@@ -36,9 +36,11 @@ The headline is **the chance that waiting 30 min gets a price ≥ 10% lower**, n
 | Odds are calibrated (test days, isotonic fit on val) | top decile: predicted 23.3%, observed 23.3% | `reports/metrics.md` §2 |
 | Odds rise with "price ÷ usual price" | jam demo (≈1.9× usual): 45% vs usual 12% | `GET /api/demo` |
 | Ranking good vs bad moments | ROC-AUC 0.589 (0.5 = coin flip) | `reports/metrics.md` §2 |
-| Any waiting rule beats "book now" **and** "hour-of-day"? | **No** — best tested rule +0.11% vs hour-of-day +0.29% | `reports/decision.json` |
+| "Tunggu" rule beats "book now"? | **Yes** — +0.22% overall; **+4.5% when price ≥ 1.5× usual**; 4 in 10 waits still cost more | `reports/decision.json` |
+| …and beats the hour-of-day rule? | **No — ties** (+0.29%) | `reports/decision.json` |
 
-So the app says **book now** and shows the odds as information, until a tested rule beats both baselines.
+So the app says **"Tunggu X min"** when the odds are clearly above usual, otherwise **book now**, and always
+shows how often waiting still cost more in tests.
 
 **Tested and rejected** (rules fixed in code before each run): a second quote / price trend
 (`reports/trend_experiment.md`), borough-wide averaging (`reports/borough_experiment.md`, inconclusive),

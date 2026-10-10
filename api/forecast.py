@@ -49,9 +49,9 @@ DECISION = ROOT / "reports" / "decision.json"
 
 
 def decision_rule() -> dict:
-    """Written by ml/evaluate.py: did the "Tunggu" odds rule beat book-now and hour-of-day on test days?"""
+    """Written by ml/evaluate.py: per variant, did the "Tunggu" rule beat book-now on held-out test days?"""
     if not DECISION.exists():
-        return {"validated": False}
+        return {}
     return json.loads(DECISION.read_text(encoding="utf-8"))
 
 
@@ -110,19 +110,21 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
-    # "Tunggu" = odds rule (wait 30 min when P(drop >= 10%) >= k x usual), served only if
-    # reports/decision.json says it beat both baselines on held-out data; otherwise always book now.
-    dec = decision_rule()
+    # "Tunggu" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
+    # (P(drop >= 10%) / usual chance) if it is >= k — only if that rule beat "book now" on held-out days.
+    gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
-    odds_high = k is not None and odds.p_save10 >= k * odds.typical_p_save10
-    wait = bool(dec["validated"]) and variant == "with_level" and odds_high  # only with_level is tested
-    best = h30
-    wait_minutes = 30 if wait else 0
+    base = load_bundle()["base_rate"]
+    mults = {h.minutes: h.p_drop10 / base[h.minutes] for h in horizon}
+    best = max(horizon, key=lambda h: mults[h.minutes])
+    odds_high = k is not None and mults[best.minutes] >= k
+    wait = bool(gate.get("validated")) and odds_high
+    wait_minutes = best.minutes if wait else 0
     saving, risk = {}, {}
     if wait:
-        saving = {a: round(rm * max(-h30.pct_change, 0), 2) for a, rm in quotes.items()}
-        risk = {a: round(rm * max(h30.pct_high, 0), 2) for a, rm in quotes.items()}
-    at_best = h30.expected_rm if wait else quotes
+        saving = {a: round(rm * max(-best.pct_change, 0), 2) for a, rm in quotes.items()}
+        risk = {a: round(rm * max(best.pct_high, 0), 2) for a, rm in quotes.items()}
+    at_best = best.expected_rm if wait else quotes
 
     reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
                    f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
@@ -138,13 +140,16 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         reasons.append("No usual price given: the model can't tell if this price is already high, "
                        "so it only advises waiting when time-of-day patterns are clear")
     if wait:
-        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual — waiting 30 min "
-                       "is a reasonable bet (tested on held-out data, reports/metrics.md)")
+        surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
+        ev = (f"when prices were ≥ 1.5x usual, waiting saved {gate['level_ge_1_5']['saving']:.0%} on average"
+              if surge else f"when we said wait, it saved {gate['saving_when_wait']:.1%} on average")
+        reasons.append(f"Tunggu {best.minutes} min: odds of a ≥10% drop are {mults[best.minutes]:.1f}x the usual. "
+                       f"In tests on held-out ride data, {ev}; "
+                       f"{(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high:
-        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual, but no waiting rule "
-                       "beat a simple time-of-day rule on held-out data, so we don't advise waiting")
+        reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
-        reasons.append("Odds of a drop are not above usual — book now")
+        reasons.append("Odds of a drop are not clearly above usual — book now")
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
