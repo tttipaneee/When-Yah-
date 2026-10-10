@@ -50,14 +50,14 @@ def main() -> None:
         rt = route(a, b, timeout=15)
         if rt is not None:
             cache[_key(a, b)] = list(rt)
-            rows["osrm"].append(dict(route=name, seen_at=r.seen_at, km=rt[0], min=rt[1], real=r.price_rm))
+            rows["osrm"].append(dict(route=name, seen_at=r.seen_at, km=rt[0], mins=rt[1], real=r.price_rm))
         seen = datetime.fromisoformat(r.seen_at)
         nxt = seen + timedelta(days=7)
         while nxt <= datetime.now(seen.tzinfo) + timedelta(minutes=5):  # TomTom needs a future departure
             nxt += timedelta(days=7)
         tt = route_with_traffic(a, b, nxt, timeout=15)
         if tt is not None:
-            rows["tomtom"].append(dict(route=name, seen_at=r.seen_at, km=tt[0], min=tt[1], real=r.price_rm,
+            rows["tomtom"].append(dict(route=name, seen_at=r.seen_at, km=tt[0], mins=tt[1], real=r.price_rm,
                                        asked_for=nxt.strftime("%a %d %b %H:%M")))
     CACHE.write_text(json.dumps(cache, indent=1))
 
@@ -72,12 +72,12 @@ def main() -> None:
         if d.empty:
             L += ["Not available (no route data" + (" — set TOMTOM_API_KEY" if method == "tomtom" else "") + ").", ""]
             continue
-        d["estimate"] = [raw_fare(k, m) for k, m in zip(d["km"], d["min"])]
+        d["estimate"] = [raw_fare(k, m) for k, m in zip(d["km"], d["mins"])]
         d["ratio"] = d.real / d.estimate
         ok, factor, verdict, med_err, med, steady = gate(d)
         result[method] = dict(passed=ok, factor=round(factor, 3), n_quotes=int(len(d)), median_abs_error=round(med_err, 3))
         L += ["| Route | Seen at | km | min | Real RM | Estimate RM | Real ÷ estimate |", "|---|---|---|---|---|---|---|"]
-        L += [f"| {r.route} | {r.seen_at} | {r.km:.1f} | {getattr(r, "min"):.0f} | {r.real:.2f} | {r.estimate:.2f} | {r.ratio:.2f} |"
+        L += [f"| {r.route} | {r.seen_at} | {r.km:.1f} | {r.mins:.0f} | {r.real:.2f} | {r.estimate:.2f} | {r.ratio:.2f} |"
               for r in d.itertuples()]
         L += ["", f"- Median |error| of raw estimate: {med_err:.0%}; median real ÷ estimate: {med:.2f}; steady (all within "
               f"±15% of median): {steady}; quotes: {len(d)}", "", f"**{method}: {verdict}.**", ""]
