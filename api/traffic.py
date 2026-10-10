@@ -32,7 +32,12 @@ def _minutes(a: tuple[float, float], b: tuple[float, float], depart: datetime, k
 @lru_cache(maxsize=256)
 def _cached(a: tuple[float, float], b: tuple[float, float], start_iso: str, key: str) -> tuple:
     start = datetime.fromisoformat(start_iso)
-    deps = [None if m == 0 else start + timedelta(minutes=m) for m in DEPARTURES]
+    now = datetime.now(start.tzinfo)
+    # forecast for the future (e.g. Monday 17:00): every departure is start + m; for "now" (or a past time,
+    # which TomTom rejects) the first departure is "now" and the rest are counted from the current time
+    future = start > now + timedelta(minutes=2)
+    base = start if future else now
+    deps = [base + timedelta(minutes=m) if (future or m) else None for m in DEPARTURES]
     with ThreadPoolExecutor(max_workers=5) as ex:
         mins = list(ex.map(lambda d: _minutes(a, b, d, key), deps))
     return tuple(mins)
