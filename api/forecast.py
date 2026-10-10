@@ -9,6 +9,7 @@ fed to the model: the validated effect in reports/event_effect.md is for NYC bas
 from datetime import timedelta
 import json
 from functools import lru_cache
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from statistics import median
 
@@ -75,7 +76,14 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
     return out, variant, level
 
 
+KL = ZoneInfo("Asia/Kuala_Lumpur")
+
+
 def forecast(req: ForecastRequest) -> ForecastResponse:
+    # Rides are in Klang Valley: read the clock in KL time whatever timezone the browser sent
+    # (naive times are taken as KL time), so hour/weekday features and event dates are right.
+    dt = req.datetime.astimezone(KL) if req.datetime.tzinfo else req.datetime.replace(tzinfo=KL)
+    req = req.model_copy(update={"datetime": dt})
     quotes = {q.app: q.price_rm for q in req.quotes}  # last quote per app wins
     nearby = events_near(req.datetime, req.pickup.lat if req.pickup else None,
                          req.pickup.lon if req.pickup else None)

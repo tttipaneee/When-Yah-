@@ -74,3 +74,10 @@ def test_demo_scenarios_run_real_forecast():
         assert set(s["response"]["wait_odds"]["rm_range"]) == {q["app"] for q in s["request"]["quotes"]}
     near = {s["id"]: [e["name"] for e in s["response"]["events"]] for s in d}
     assert any("MAMAMOO" in n for n in near["mamamoo"]) and any("Eunji" in n for n in near["eunji_rain"])
+
+
+def test_time_is_read_in_kl_whatever_timezone_was_sent():
+    kl = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-10T15:22:00+08:00", "usual_price_rm": 20}).json()
+    utc = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-10T07:22:00Z", "usual_price_rm": 20}).json()
+    assert kl["wait_odds"] == utc["wait_odds"]
+    assert utc["datetime"].endswith("+08:00")
