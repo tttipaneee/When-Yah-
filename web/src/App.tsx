@@ -293,13 +293,18 @@ export default function App() {
     if(!q){q={app:ACTIVE,price:0};state.quotes.push(q)}
     return q;
   }
+  // team-supplied logo from web/public/apps/<id>.png|svg; if neither file exists the logo is simply left out
+  function appLogo(app){
+    var id=APP_FILE[app];if(!id)return "";
+    return '<img class="qlogo" src="/apps/'+id+'.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src=\'/apps/'+id+'.svg\'}else{this.remove()}">';
+  }
   function chipPrice(app){var q=state.quotes.filter(function(x){return x.app===app})[0];return q&&q.price>0?rm(q.price):""}
   function renderQuotes(){
     var q=activeQuote(),name=ACTIVE==="Other app"?"your other app":ACTIVE;
     var help=ACTIVE==="inDrive"?"Type the fare you offered or were offered.":"";  // the question already says it for other apps
     $("quotes").innerHTML='<div class="qchips" role="group" aria-label="Choose the app">'+APPS.map(function(app){
         return '<button type="button" class="qchip" data-app="'+esc(app)+'" aria-pressed="'+(app===ACTIVE)+'">'+
-          '<span>'+esc(app==="Other app"?"Other":app)+'</span><em data-chip="'+esc(app)+'">'+chipPrice(app)+'</em></button>';
+          '<span class="qname">'+appLogo(app)+esc(app==="Other app"?"Other":app)+'</span><em data-chip="'+esc(app)+'">'+chipPrice(app)+'</em></button>';
       }).join("")+'</div>'+
       '<label class="qbig" for="qPrice"><span class="qq">What does <b>'+esc(name)+'</b> show?</span>'+
       '<span class="qamt"><span>RM</span><input id="qPrice" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00"'+(help?' aria-describedby="qHelp"':'')+'></span></label>'+

@@ -478,3 +478,7 @@ button.opt:active{transform:scale(.98)}
 .fm small{font-size:10.5px;font-weight:800;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff}
 .fm.me .lb-av.big{border-color:var(--lime);background:var(--ink)}
 .fm.me b{background:var(--lime)}
+.qchip .qname{display:inline-flex;align-items:center;gap:5px}
+.qlogo{width:18px;height:18px;border-radius:5px;object-fit:cover;background:#fff;flex:none}
+.usual-in input{-moz-appearance:textfield}
+.usual-in input::-webkit-outer-spin-button,.usual-in input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
