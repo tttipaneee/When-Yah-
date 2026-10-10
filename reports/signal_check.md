@@ -11,6 +11,9 @@ for that trip's distance and duration (linear fit per company, training days onl
 - Collection has coverage gaps between timestamps.
 
 ## NYC TLC High Volume FHV, Aug 2024 — **GO (modest)**
+File: `fhvhv_tripdata_2024-08.parquet`, 465,991,646 bytes, sha256 `99fd2913…e08fae2`, 19,128,392 rows
+(`scripts/download_data.sh`; official TLC CloudFront URL, byte-identical mirror as fallback). Re-run on
+10 Oct 2026 reproduced every line below exactly.
 Command: `python ml/check_signal_nyc.py data/raw/fhvhv_tripdata_2024-08.parquet`
 ```
 rows=19,128,392 days=33 2024-07-31 .. 2024-09-01 train_cut=2024-08-23

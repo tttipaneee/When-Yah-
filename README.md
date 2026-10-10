@@ -19,6 +19,7 @@ ride-hailing data; prices come from what you type. Not connected to Grab, inDriv
 ## Run it
 ```bash
 pip install -r requirements.txt && (cd web && npm install)   # setup (Python 3.11+, Node 20+)
+scripts/download_data.sh                                      # NYC HVFHV Aug 2024 -> data/raw/ (sha256-checked)
 scripts/run_demo.sh                                           # API :8000 + web :5173
 python -m pytest -q tests                                     # API contract tests
 ```
