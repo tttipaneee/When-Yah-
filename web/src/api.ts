@@ -12,6 +12,10 @@ export interface HorizonPoint {
   minutes: number; pct_change: number; pct_low: number; pct_high: number; p_drop10: number
   expected_rm: Record<string, number>
 }
+export interface WaitOdds {
+  minutes: number; p_save10: number; typical_p_save10: number; pct_low: number; pct_high: number
+  rm_range: Record<string, [number, number]>
+}
 export interface ForecastEvent {
   name: string; source_url: string
   learned_effect: { pct: number; window: string } | null
@@ -19,6 +23,7 @@ export interface ForecastEvent {
 export interface ForecastResponse {
   datetime: string
   horizon: HorizonPoint[]
+  wait_odds: WaitOdds
   decision: 'book_now' | 'wait'
   best_time: string
   wait_minutes: number
@@ -29,7 +34,7 @@ export interface ForecastResponse {
   events: ForecastEvent[]
   reasons: string[]
   model_version: string
-  evidence: { metrics: string }
+  evidence: Record<string, string>
 }
 export interface EventItem {
   id: string; name: string; venue: string; lat: number; lon: number

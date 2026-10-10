@@ -16,7 +16,7 @@ import joblib
 from fastapi import HTTPException
 
 from api.events import events_near
-from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint
+from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,6 +79,12 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     horizon = [HorizonPoint(minutes=m, pct_change=pc, pct_low=lo, pct_high=hi, p_drop10=round(p, 3),
                             expected_rm={a: round(rm * (1 + pc), 2) for a, rm in quotes.items()})
                for m, (pc, lo, hi, p) in pred.items()]
+    h30 = next(h for h in horizon if h.minutes == 30)
+    typical = load_bundle()["base_rate"][30]
+    odds = WaitOdds(minutes=30, p_save10=h30.p_drop10, typical_p_save10=round(typical, 3),
+                    pct_low=h30.pct_low, pct_high=h30.pct_high,
+                    rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
+                              for a, rm in quotes.items()})
     best = min(horizon, key=lambda h: h.pct_change)
     # wait only if the expected saving beats the downside in the model's p90 band
     wait = best.pct_change < 0 and -best.pct_change > max(best.pct_high, 0)
@@ -89,6 +95,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         risk = {a: round(rm * max(best.pct_high, 0), 2) for a, rm in quotes.items()}
     at_best = best.expected_rm if wait else quotes
 
+    reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
+                   f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
+                   f"{odds.pct_low:+.0%} and {odds.pct_high:+.0%}")
     if variant == "with_level":
         clipped = " (clipped to the training range)" if not LEVEL_RANGE[0] <= level <= LEVEL_RANGE[1] else ""
         reasons.append(f"Your quote is {level - 1:+.0%} vs your usual price{clipped}")
@@ -112,7 +121,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
     reasons.append("On held-out data this advice did not beat a simple time-of-day rule; see reports/metrics.md")
     return ForecastResponse(
-        datetime=req.datetime, horizon=horizon, decision="wait" if wait else "book_now",
+        datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,
         expected_saving_rm=saving, risk_if_wait_rm=risk,
         apps_ranked_now=_rank(quotes), apps_ranked_best_time=_rank(at_best),

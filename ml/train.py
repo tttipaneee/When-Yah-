@@ -40,7 +40,9 @@ def main() -> None:
     df = load_frame()
     tr, va = df[df.split == "train"], df[df.split == "val"]
     bundle = {"version": "lgbm_v1", "horizons": HORIZONS, "features": VARIANTS, "models": {},
-              "threshold": {}, "trained_on": "NYC HVFHV zone x 15-min windows, Aug 1-21 2024"}
+              "threshold": {}, "trained_on": "NYC HVFHV zone x 15-min windows, Aug 1-21 2024",
+              # typical chance of a >= 10% drop at each horizon (train days) — the "usual" odds shown to users
+              "base_rate": {h: float(tr[f"drop10_{h}"].mean()) for h in HORIZONS}}
     for name, feats in VARIANTS.items():
         bundle["models"][name] = {}
         for h in HORIZONS:

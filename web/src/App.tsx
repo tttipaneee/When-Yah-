@@ -52,7 +52,21 @@ export default function App() {
         <button type="submit">Ramal</button>
       </form>
       {err && <p>{err}</p>}
-      {res && <pre>{JSON.stringify(res, null, 2)}</pre>}
+      {res && (
+        <section>
+          <p>
+            Peluang harga turun ≥10% jika tunggu {res.wait_odds.minutes} min:{' '}
+            <strong>{Math.round(res.wait_odds.p_save10 * 100)}%</strong>{' '}
+            (biasa: {Math.round(res.wait_odds.typical_p_save10 * 100)}%)
+          </p>
+          <ul>
+            {Object.entries(res.wait_odds.rm_range).map(([app, [lo, hi]]) => (
+              <li key={app}>{app}: RM{lo.toFixed(2)} – RM{hi.toFixed(2)} dalam {res.wait_odds.minutes} min</li>
+            ))}
+          </ul>
+          <pre>{JSON.stringify(res, null, 2)}</pre>
+        </section>
+      )}
     </main>
   )
 }

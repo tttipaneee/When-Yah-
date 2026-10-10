@@ -45,9 +45,20 @@ class ForecastEvent(BaseModel):
     learned_effect: LearnedEffect | None = None
 
 
+class WaitOdds(BaseModel):
+    """Headline: chance that waiting `minutes` gets a price >= 10% lower than now."""
+    minutes: int
+    p_save10: float
+    typical_p_save10: float          # same chance across all training windows (base rate)
+    pct_low: float                   # p10..p90 range of the price change at `minutes`
+    pct_high: float
+    rm_range: dict[str, list[float]] = {}  # per quoted app: [low, high] RM at `minutes`
+
+
 class ForecastResponse(BaseModel):
     datetime: datetime
     horizon: list[HorizonPoint]
+    wait_odds: WaitOdds
     decision: Literal["book_now", "wait"]
     best_time: datetime
     wait_minutes: int

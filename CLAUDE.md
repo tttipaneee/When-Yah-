@@ -56,6 +56,8 @@ Fill in as they're created; keep them working.
 {"datetime": "2026-10-10T18:10:00+08:00",
  "horizon": [{"minutes": 15, "pct_change": -0.06, "pct_low": -0.14, "pct_high": 0.03, "p_drop10": 0.41,
               "expected_rm": {"grab": 35.7}}],
+ "wait_odds": {"minutes": 30, "p_save10": 0.33, "typical_p_save10": 0.125, "pct_low": -0.18, "pct_high": 0.14,
+               "rm_range": {"grab": [31.3, 43.4]}},
  "decision": "wait", "best_time": "2026-10-10T18:35:00+08:00", "wait_minutes": 25,
  "expected_saving_rm": {"grab": 4.2}, "risk_if_wait_rm": {"grab": 1.1},
  "apps_ranked_now": ["indrive", "grab"], "apps_ranked_best_time": ["grab", "indrive"],
@@ -63,7 +65,10 @@ Fill in as they're created; keep them working.
  "reasons": ["Friday evening peak typically eases after 18:30 in training data", "no rain"],
  "model_version": "lgbm_v1", "evidence": {"metrics": "reports/metrics.md"}}
 ```
-- `expected_rm`, savings and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
+- **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
+  typical chance (training base rate), plus the p10–p90 range. `decision` stays but is almost always `book_now`
+  (see `reports/metrics.md`). `reasons[0]` states the odds in words.
+- `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.

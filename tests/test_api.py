@@ -50,3 +50,15 @@ def test_malaysian_events_never_get_a_number():
     body = {**BODY, "datetime": "2026-10-11T21:00:00+08:00", "pickup": {"lat": 3.1394413, "lon": 101.7091281}}
     d = client.post("/api/forecast", json=body).json()
     assert d["events"] and all(e["learned_effect"] is None for e in d["events"])
+
+
+def test_wait_odds_headline():
+    d = client.post("/api/forecast", json={**BODY, "usual_price_rm": 25.0}).json()
+    o = d["wait_odds"]
+    h30 = next(h for h in d["horizon"] if h["minutes"] == 30)
+    assert o["minutes"] == 30 and o["p_save10"] == h30["p_drop10"]
+    assert 0 < o["typical_p_save10"] < 1 and set(o["rm_range"]) == {"grab", "indrive"}
+    assert o["rm_range"]["grab"][0] <= o["rm_range"]["grab"][1]
+    assert d["reasons"][0].startswith("Chance that waiting 30 min saves you 10% or more")
+    d = client.post("/api/forecast", json={**BODY, "quotes": []}).json()
+    assert d["wait_odds"]["rm_range"] == {}
