@@ -357,7 +357,7 @@ export default function App() {
   function requestModel(){
     var rk = routeKey();
     runModel({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
-      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats();if(EARN_PENDING){EARN_PENDING=false;awardForecast()}})
+      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats();aiReset();if(EARN_PENDING){EARN_PENDING=false;awardForecast()}})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
   function realOnly(){
@@ -503,7 +503,7 @@ export default function App() {
     resOpener=opener||$("predict");
     setResRoute();
     remaining=bestMin*60;tick();renderPrediction();
-    $("res").classList.add("on");$("res").setAttribute("aria-hidden","false");
+    $("res").classList.add("on");$("res").setAttribute("aria-hidden","false");aiReset();
     $("resScroll").scrollTop=0;
     setTimeout(function(){$("closeRes").focus({preventScroll:true})},240);
   }
@@ -683,17 +683,26 @@ export default function App() {
   });
   ptsShow();
   /* ---------- AI explanation (Claude, checked against this forecast's numbers) ---------- */
-  var AI_KEY="";
-  function aiReset(){var k=routeKey()+JSON.stringify([state.quotes,state.usual]);if(k!==AI_KEY){AI_KEY=k;$("aiOut").innerHTML="";$("aiBtn").disabled=false}}
-  $("aiBtn").onclick=function(){
-    var btn=this;btn.disabled=true;$("aiOut").innerHTML='<div class="empty">Writing an explanation…</div>';
-    explainForecast({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
-      .then(function(r){
-        $("aiOut").innerHTML=r.ai&&r.text?'<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by Claude (AI) from this forecast only — every number was checked against the forecast.</div>'
-          :'<div class="why-src">AI explanation unavailable'+(r.reason?' ('+esc(r.reason)+')':'')+'. The summary above says the same thing.</div>';
-        btn.disabled=false;
-      });
-  };
+  // Runs by itself when the forecast screen shows a result; one call per forecast input (cached), shortly
+  // after typing stops. If AI is unavailable or rejected, the Details rows open instead.
+  var AI_KEY="",AI_CACHE={},AI_T=null;
+  function aiShow(r){
+    var d=document.querySelector(".why-details");
+    if(r&&r.ai&&r.text){$("aiOut").innerHTML='<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>';if(d)d.open=false}
+    else{$("aiOut").innerHTML='';if(d)d.open=true}
+  }
+  function aiReset(){
+    if(!MODEL||!$("res").classList.contains("on"))return;
+    var k=JSON.stringify([routeKey(),state.quotes,state.usual]);
+    if(k===AI_KEY)return;
+    AI_KEY=k;clearTimeout(AI_T);
+    if(AI_CACHE[k]){aiShow(AI_CACHE[k]);return}
+    $("aiOut").innerHTML='<p class="ai-text ai-wait">Explaining this forecast…</p>';
+    AI_T=setTimeout(function(){
+      explainForecast({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
+        .then(function(r){if(r.ai)AI_CACHE[k]=r;if(k===AI_KEY)aiShow(r)});
+    },600);
+  }
   /* ---------- Proof screen: every number from /api/metrics (reports/) ---------- */
   var PROOF=null;
   function navHome(){document.querySelectorAll(".nav button").forEach(function(x){
@@ -900,14 +909,6 @@ export default function App() {
           </div>
         </section>
 
-        <section className="card ai-card" aria-live="polite">
-          <button className="ghost ai-btn" id="aiBtn" type="button">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9.5l-4.7 1.9L12 16l-1.8-4.6L5.5 9.5l4.7-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
-            Explain this in plain words
-          </button>
-          <div id="aiOut"></div>
-        </section>
-
         <section className="card" aria-labelledby="rt">
           <div className="card-head">
             <div><h2 id="rt">Your apps</h2><p className="sub" id="rtSub">Cheapest first, from the prices you typed.</p></div>
@@ -928,9 +929,10 @@ export default function App() {
 
         <section className="card" aria-labelledby="wt">
           <div className="card-head">
-            <div><h2 id="wt">Why</h2><p className="sub">What the model and live data say for the next hour.</p></div>
+            <div><h2 id="wt">Why</h2><p className="sub">In plain words, from this forecast.</p></div>
           </div>
-          <div className="why2" id="why"></div>
+          <div id="aiOut" aria-live="polite"></div>
+          <details className="why-details"><summary>Details</summary><div className="why2" id="why"></div></details>
         </section>
 
         <section className="card" aria-labelledby="ft">

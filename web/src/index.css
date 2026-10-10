@@ -341,3 +341,9 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .ai-card{padding-top:12px;padding-bottom:12px}
 .ai-btn{width:100%;justify-content:center;gap:8px}
 .ai-text{margin:10px 0 4px;font-size:14px;line-height:1.5;font-weight:500}
+.ai-wait{opacity:.55;font-style:italic}
+.why-details{margin-top:10px}
+.why-details summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--mute);list-style:none;padding:6px 0}
+.why-details summary::before{content:'+ '}
+.why-details[open] summary::before{content:'– '}
+.why-details .why2{margin-top:8px}

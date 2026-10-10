@@ -96,7 +96,7 @@ Fill in as they're created; keep them working.
   extra quoted app (max 3), same route within 10 min = 0; fare report = 25 pts once per forecast; 150 pts/day cap.
   Leaderboard tab (trophy) + header points chip. The six friends are **labelled example data** ("Example friends — not
   real users"), scored around the user's points at first look each week; no friends map, no location sharing.
-- `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-opus-5-5`, effort low,
+- `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-sonnet-5-5`, effort low, runs automatically as the "Why" text,
   server-side refusal fallback on) explains the server-recomputed forecast from a facts JSON only; any number in the
   answer that is not in the facts → rejected, `ai: false`. Needs `ANTHROPIC_API_KEY` in `.env`; without it `ai: false`.
 - `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as

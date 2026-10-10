@@ -11,7 +11,7 @@ import re
 from api.forecast import forecast
 from api.schemas import ForecastRequest
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-sonnet-5-5"  # cheaper than Opus; enough for 3-4 plain sentences (Ravin, 10 Oct)
 _ENV = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 APP_NAME = {"grab": "Grab", "indrive": "inDrive", "gvride": "GV Ride"}
 
@@ -22,7 +22,9 @@ SYSTEM = (
     "Use only the numbers that appear in the facts, written the same way; never compute, round or invent a number. "
     "Do not mention models, AUC, data sets, cities other than Kuala Lumpur, or how the forecast was made. "
     "We are not connected to Grab, inDrive or GV Ride; never suggest we are. "
-    "It is a forecast, not a promise: say so briefly."
+    "It is a forecast, not a promise: say so briefly. "
+    "For events, say only what the reasons say: an event nearby is information, and its effect on price in "
+    "Malaysia is not measured, so never say an event will or could push prices up unless a reason says so."
 )
 
 
