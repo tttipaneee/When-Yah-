@@ -7,7 +7,7 @@ congestion_trend = speed now ÷ speed 15 min earlier (> 1 = clearing). Same spli
 control as `reports/metrics.md`. Test windows: **77,629**.
 
 ## A. Does traffic improve the forecast?
-Rule (pre-registered): saving CI above the hour-of-day baseline's, or +30 min AUC ≥ 0.03 higher than
+Rule (fixed in code before the run; committed together with the results): saving CI above the hour-of-day baseline's, or +30 min AUC ≥ 0.03 higher than
 the same model without traffic with a day-bootstrap CI above 0.
 
 | Policy | Waits | Mean saving vs book now (95% CI) | Waits that cost more | AUC drop ≥10% @30 | MAE @30 vs persistence |
@@ -26,17 +26,18 @@ the same model without traffic with a day-bootstrap CI above 0.
 
 ## B. Can the model say why a price is high?
 Model of the current level (price ÷ expected) from time, rain, events and traffic, trained on train days.
-Rule (pre-registered): useful only if test R² ≥ 0.10.
+Rule (fixed in code before the run, revised after the re-audit): traffic must add ≥ 0.05 test R² over
+time + rain + events + borough.
 
-- Test R²: **0.162** with traffic; 0.022 with time + rain only.
+- Test R²: time + rain 0.022; + events + traffic 0.162; + events + borough 0.419; + events + borough + traffic **0.415** (gain from traffic -0.004).
+- Spearman(level, congestion) on train: -0.28 (slower traffic goes with a higher level).
 - Windows priced ≥ 1.5× expected (255 in test): actual excess +61% on average; the model
   explains +2% of it. Mean contributions: hour +0.017, dow +0.003, rain +0.002, congestion +0.009.
 
-**Result B: the model CAN attribute a high price to time / rain / events / traffic.**
+**Result B: the model can NOT usefully attribute a high price to time / rain / events / traffic.**
 
-**Read with care.** The rule above passes on all windows, but on the cases that matter — prices
-≥ 1.5× expected — the model explains only +2% of a +61% excess. Part of the overall R²
-may also be mechanical: a jam lengthens trips, which raises the expected fare (it uses actual minutes) and
-so lowers the measured level. **App decision:** do not tell users "your price is high because of the
-jam / rain"; at most say how much of it normal patterns explain (very little), and that the rest is
-demand and driver supply we cannot see.
+Traffic's apparent R² is mostly area identity (Manhattan is pricier and slower). On prices ≥ 1.5× expected,
+time/rain/events/traffic explain +2% of a +61% excess. **App decision:** never tell users
+"your price is high because of the jam / rain".
+Most of a high price is not explained by anything we can observe (demand and driver supply are not
+in the data), so the app must not claim "high because of the jam / rain".

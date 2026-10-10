@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
 
 from ml.features import HORIZONS
-from ml.train import MODEL, load_frame
+from ml.train import MODEL, drop_prob, load_frame
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.md"
@@ -70,7 +70,7 @@ def main() -> None:
         X = te[feats]
         ms = b["models"][v]
         preds[v] = {k: np.c_[[ms[h][k].predict(X) for h in HORIZONS]].T for k in ("mean", "q10", "q90")}
-        preds[v]["p"] = np.c_[[ms[h]["clf"].predict_proba(X)[:, 1] for h in HORIZONS]].T
+        preds[v]["p"] = np.c_[[drop_prob(ms[h], X) for h in HORIZONS]].T
 
     rows = {"Book now (always)": policy_stats(np.zeros(len(te), bool), np.zeros(len(te), int), actual, clusters)}
     rows["Hour-of-day average ratio"] = policy_stats(*decide(ha, None), actual, clusters)
@@ -196,6 +196,17 @@ def main() -> None:
           f"saving {pct(odr['saving'])} vs hour-of-day {pct(ho_['saving'])} → "
           + ("**beats both baselines; the app may advise waiting.**" if validated else
              "**does not beat the hour-of-day baseline; the app always says book now and shows the odds as information.**")]
+    calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
+                   "windows": int(len(g[1]))}
+                  for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]
+    (ROOT / "reports" / "metrics.json").write_text(json.dumps({
+        "source": "reports/metrics.md", "test_days": "2024-08-26..2024-08-31", "test_windows": int(len(te)),
+        "policies": [{"name": k, "wait_rate": round(float(v["wait_rate"]), 4), "saving": round(float(v["saving"]), 5),
+                      "saving_ci": [round(float(v["lo"]), 5), round(float(v["hi"]), 5)],
+                      "waits_cost_more": round(float(v["worse_share_of_waits"]), 4)} for k, v in rows.items()],
+        "auc_drop10_30": {v: round(float(roc_auc_score((actual[:, 1] <= 0.9).astype(int), preds[v]["p"][:, 1])), 3)
+                          for v in preds},
+        "calibration_with_level_30": calib_rows}, indent=1), encoding="utf-8")
     (ROOT / "reports" / "decision.json").write_text(json.dumps(
         {"validated": bool(validated), "rule": "wait 30 min if P(drop>=10% @30) >= k x usual",
          "k": b["wait_k"]["with_level"], "test_saving": round(float(odr["saving"]), 5),

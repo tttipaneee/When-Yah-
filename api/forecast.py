@@ -20,6 +20,7 @@ from api.events import events_near
 from api.fare import estimate as fare_estimate
 from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
+from ml.train import drop_prob
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "ml" / "models" / "lgbm_v1.joblib"
@@ -73,7 +74,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
         m = b["models"][variant][h]
         mean, lo, hi = (float(m[k].predict(X)[0]) for k in ("mean", "q10", "q90"))
         lo, hi = min(lo, mean), max(hi, mean)
-        out[h] = (mean - 1, lo - 1, hi - 1, float(m["clf"].predict_proba(X)[0, 1]))
+        out[h] = (mean - 1, lo - 1, hi - 1, float(drop_prob(m, X)[0]))
     return out, variant, level
 
 
@@ -114,7 +115,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     dec = decision_rule()
     k = load_bundle().get("wait_k", {}).get(variant)
     odds_high = k is not None and odds.p_save10 >= k * odds.typical_p_save10
-    wait = bool(dec["validated"]) and odds_high
+    wait = bool(dec["validated"]) and variant == "with_level" and odds_high  # only with_level is tested
     best = h30
     wait_minutes = 30 if wait else 0
     saving, risk = {}, {}

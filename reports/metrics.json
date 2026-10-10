@@ -1,0 +1,143 @@
+{
+ "source": "reports/metrics.md",
+ "test_days": "2024-08-26..2024-08-31",
+ "test_windows": 77629,
+ "policies": [
+  {
+   "name": "Book now (always)",
+   "wait_rate": 0.0,
+   "saving": 0.0,
+   "saving_ci": [
+    0.0,
+    0.0
+   ],
+   "waits_cost_more": 0.0
+  },
+  {
+   "name": "Hour-of-day average ratio",
+   "wait_rate": 0.3747,
+   "saving": 0.00288,
+   "saving_ci": [
+    0.00253,
+    0.00325
+   ],
+   "waits_cost_more": 0.4437
+  },
+  {
+   "name": "Linear on level (1/level)",
+   "wait_rate": 0.3096,
+   "saving": 0.0009,
+   "saving_ci": [
+    0.00055,
+    0.00123
+   ],
+   "waits_cost_more": 0.4667
+  },
+  {
+   "name": "When Yah? no_level",
+   "wait_rate": 0.0,
+   "saving": 0.0,
+   "saving_ci": [
+    0.0,
+    0.0
+   ],
+   "waits_cost_more": 0.0
+  },
+  {
+   "name": "When Yah? with_level",
+   "wait_rate": 0.0045,
+   "saving": 0.00028,
+   "saving_ci": [
+    0.0002,
+    0.00036
+   ],
+   "waits_cost_more": 0.2906
+  },
+  {
+   "name": "When Yah? no_level, odds rule (k=1.5)",
+   "wait_rate": 0.0452,
+   "saving": 0.00074,
+   "saving_ci": [
+    0.00055,
+    0.00092
+   ],
+   "waits_cost_more": 0.422
+  },
+  {
+   "name": "When Yah? with_level, odds rule (k=1.25)",
+   "wait_rate": 0.1022,
+   "saving": 0.00111,
+   "saving_ci": [
+    0.00087,
+    0.00132
+   ],
+   "waits_cost_more": 0.4371
+  },
+  {
+   "name": "Oracle (perfect foresight; upper bound incl. measurement noise)",
+   "wait_rate": 0.8036,
+   "saving": 0.06823,
+   "saving_ci": [
+    0.06745,
+    0.06904
+   ],
+   "waits_cost_more": 0.0
+  }
+ ],
+ "auc_drop10_30": {
+  "no_level": 0.568,
+  "with_level": 0.589
+ },
+ "calibration_with_level_30": [
+  {
+   "mean_predicted": 0.0765,
+   "observed": 0.079,
+   "windows": 9456
+  },
+  {
+   "mean_predicted": 0.09,
+   "observed": 0.0912,
+   "windows": 8402
+  },
+  {
+   "mean_predicted": 0.0964,
+   "observed": 0.0931,
+   "windows": 6983
+  },
+  {
+   "mean_predicted": 0.0996,
+   "observed": 0.0934,
+   "windows": 8063
+  },
+  {
+   "mean_predicted": 0.104,
+   "observed": 0.1019,
+   "windows": 8296
+  },
+  {
+   "mean_predicted": 0.1128,
+   "observed": 0.1071,
+   "windows": 6843
+  },
+  {
+   "mean_predicted": 0.116,
+   "observed": 0.1136,
+   "windows": 11969
+  },
+  {
+   "mean_predicted": 0.1307,
+   "observed": 0.1345,
+   "windows": 4602
+  },
+  {
+   "mean_predicted": 0.1459,
+   "observed": 0.1452,
+   "windows": 7424
+  },
+  {
+   "mean_predicted": 0.233,
+   "observed": 0.2327,
+   "windows": 5591
+  }
+ ]
+}

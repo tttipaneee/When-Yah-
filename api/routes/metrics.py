@@ -1,9 +1,12 @@
+import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter
 
 router = APIRouter()
 REPORTS = Path(__file__).resolve().parents[2] / "reports"
+EXPERIMENTS = ["trend_experiment", "borough_experiment", "traffic_experiment", "extreme_experiment", "fare_check"]
 
 
 def _read(name: str) -> str | None:
@@ -11,6 +14,19 @@ def _read(name: str) -> str | None:
     return p.read_text(encoding="utf-8") if p.exists() else None
 
 
+def _json(name: str) -> dict | None:
+    t = _read(name)
+    return json.loads(t) if t else None
+
+
 @router.get("/api/metrics")
 def get_metrics() -> dict:
-    return {"metrics": _read("metrics.md"), "event_effect": _read("event_effect.md")}
+    """Report texts plus structured numbers for the judges' screen; every number comes from reports/."""
+    verdicts = {}
+    for e in EXPERIMENTS:
+        t = _read(f"{e}.md")
+        if t:
+            verdicts[e] = [m.strip("* ") for m in re.findall(r"^\*\*Result[^\n]*", t, flags=re.M)]
+    return {"metrics": _read("metrics.md"), "event_effect": _read("event_effect.md"),
+            "structured": _json("metrics.json"), "decision": _json("decision.json"),
+            "event_effect_summary": _json("event_effect.json"), "experiments": verdicts}

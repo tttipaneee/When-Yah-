@@ -81,7 +81,8 @@ Fill in as they're created; keep them working.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
-- `GET /api/metrics` → contents of `reports/metrics.md` and `reports/event_effect.md` as JSON.
+- `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
+  calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).
 Changing the contract: update this section and tell both teammates.
 

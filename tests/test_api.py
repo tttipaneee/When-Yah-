@@ -89,3 +89,9 @@ def test_usual_price_estimate_only_when_fare_check_passed():
     d = client.post("/api/forecast", json=body).json()
     if not check().get("passed"):
         assert d["usual_price_estimate"] is None and d["model_version"] == "lgbm_v1/no_level"
+
+
+def test_metrics_structured_for_judges_screen():
+    d = client.get("/api/metrics").json()
+    assert d["structured"]["calibration_with_level_30"] and d["decision"]["validated"] in (True, False)
+    assert "trend_experiment" in d["experiments"]

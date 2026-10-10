@@ -6,7 +6,7 @@ zone x 15 min. Averaging thousands of trips removes most measurement noise, so a
 "surge is ending" pattern would show up here if it exists. The borough is NOT a feature (area-agnostic).
 Zone -> borough: NYC TLC taxi zones (NYC Open Data export 2025-10-03), data/zones/taxi_zones_borough.csv.
 
-Pre-registered success rule (written before running): borough-level prediction "helps" if, on held-out
+Success rule (fixed in code before the run): borough-level prediction "helps" if, on held-out
 TEST days, a When Yah? variant's mean policy saving has a 95% CI lower bound above the hour-of-day
 baseline's upper bound, OR its +30 min drop-10% ROC-AUC is >= 0.65. Otherwise: "does not help".
 Usage: python -m ml.experiment_borough
@@ -104,7 +104,7 @@ def main() -> None:
          "as `reports/metrics.md`. Borough is not a model feature.",
          f"Test windows: **{len(te):,}**; median trips per window: {int(df.n.median()):,}. "
          f"Share of test windows where the price drops ≥ 10% by +30 min: {y30.mean():.1%}.",
-         "Pre-registered rule: helps if a variant's saving CI is above the hour-of-day baseline's, or its",
+         "Rule (fixed in code before the run; committed together with the results): helps if a variant's saving CI is above the hour-of-day baseline's, or its",
          "+30 min drop AUC ≥ 0.65.", "",
          "| Policy | Waits | Mean saving vs book now (95% CI) | Saving when it waits | Waits that cost more | AUC drop ≥10% @30 | MAE @30 vs persistence |",
          "|---|---|---|---|---|---|---|"]
@@ -115,8 +115,10 @@ def main() -> None:
                  f"{pct(s['saving_when_wait'])} | {s['worse_share_of_waits']:.1%} | {extra} |")
     L += ["", f"AUC 95% CI (bootstrap over test days): " + "; ".join(f"{v} {lo:.2f}–{hi:.2f}" for v, (lo, hi) in auc_ci.items())
           + f". Drops ≥ 10% at +30 min in test: **{int(y30.sum())} windows** — a very small number of events."]
-    L += ["", f"**Result: borough-level prediction {'HELPS (' + ', '.join(wins) + ')' if wins else 'does NOT help'}** "
-          "under the pre-registered rule."]
+    L += ["", f"Rule outcome: {'passes (' + ', '.join(wins) + ')' if wins else 'fails'}. **Result: INCONCLUSIVE** — the AUC rests on "
+          f"{int(y30.sum())} drop windows (a handful of episodes, mostly Manhattan pre-dawn), borough-level `level` partly "
+          "encodes area identity, and savings are not above the hour-of-day rule. Event features are off here (venue "
+          "zone IDs never match borough codes)."]
     L += ["", "## Reading (plain)",
           f"- Area-wide prices ARE somewhat predictable: with_level forecast error is {mae['with_level']:+.1%} vs",
           "  persistence, and it ranks the rare 10% drops well (AUC above).",

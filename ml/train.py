@@ -12,6 +12,7 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import precision_recall_curve
 
 from ml.features import HORIZONS, NO_LEVEL, WITH_LEVEL, build_frame
@@ -44,6 +45,12 @@ def clf_for(name: str, feats: list[str]) -> lgb.LGBMClassifier:
                               monotone_constraints=[1 if f == "level" else 0 for f in feats])
 
 
+def drop_prob(m: dict, X) -> np.ndarray:
+    """Calibrated P(drop >= 10%) — use this everywhere (evaluate, API), never m["clf"] directly."""
+    p = m["clf"].predict_proba(X)[:, 1]
+    return m["cal"].predict(p) if "cal" in m else p
+
+
 K_GRID = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)
 
 
@@ -51,7 +58,7 @@ def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
     """"Tunggu" rule: wait 30 min when P(drop >= 10% at +30) >= k x the usual chance. k is picked on VAL days
     (highest mean saving vs book now); None (= never advise waiting) if no k saves money on val."""
     v = va[va.ratio_30.notna()]
-    p = bundle["models"][name][30]["clf"].predict_proba(v[bundle["features"][name]])[:, 1]
+    p = drop_prob(bundle["models"][name][30], v[bundle["features"][name]])
     base = bundle["base_rate"][30]
     best, best_saving = None, 0.0
     for k in K_GRID:
@@ -83,7 +90,10 @@ def main() -> None:
                  "clf": clf_for(name, feats).fit(X, d[f"drop10_{h}"].astype(int))}
             bundle["models"][name][h] = m
             v = va[va[f"drop10_{h}"].notna()]
-            p = m["clf"].predict_proba(v[feats])[:, 1]
+            # isotonic calibration on VAL (re-audit: raw probabilities were overconfident above ~0.55)
+            m["cal"] = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1).fit(
+                m["clf"].predict_proba(v[feats])[:, 1], v[f"drop10_{h}"].astype(int))
+            p = drop_prob(m, v[feats])
             prec, rec, thr = precision_recall_curve(v[f"drop10_{h}"].astype(int), p)
             f1 = 2 * prec * rec / np.maximum(prec + rec, 1e-9)
             bundle["threshold"][(name, h)] = float(thr[np.argmax(f1[:-1])])

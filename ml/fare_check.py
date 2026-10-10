@@ -1,7 +1,7 @@
 """Is the route-based normal-fare estimate accurate enough? -> reports/fare_check.md + reports/fare_check.json
 
 Compares api.fare.raw_fare(OSRM route) with REAL off-peak Grab prices we saw ourselves
-(data/fares/offpeak_quotes.csv: when seen, from/to coordinates, price). Pre-registered gate:
+(data/fares/offpeak_quotes.csv: when seen, from/to coordinates, price). Gate (fixed in code before any quotes were added):
  - raw estimate passes if median |error| <= 15%;
  - else, if errors are steady (all quotes within ±15% of the median ratio), a correction factor =
    median(real / estimate) is allowed (fitted on our own real quotes, documented) — needs >= 4 quotes;
