@@ -98,7 +98,7 @@ export default function App() {
   }
   // Route time + distance: TomTom traffic-aware "leave now" (via /api/forecast) when the API has it,
   // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
-  var OSRM_ROUTE = null, routeLine = null, MODEL_ROUTE = "";
+  var OSRM_ROUTE = null, MODEL_ROUTE = "";
   function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
   function routeText(){
     var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
@@ -111,16 +111,14 @@ export default function App() {
   }
   function showRouteStats(){
     var r = routeText(), rs = document.getElementById("routeStats");
+    // shown once, in the map's bottom panel with its source (a label on the line covered the place names)
     if(rs) rs.innerHTML = r ? '<span>' + r.html + ' <span style="opacity:.6">· ' + esc(r.src) + '</span></span>' : "";
-    if(routeLine){
-      routeLine.unbindTooltip();
-      if(r) routeLine.bindTooltip(r.html, {permanent: true, direction: "center", className: "map-label"}).openTooltip();
-    }
   }
+  var BASE_PLACES = Object.keys(PLACE_LATLON);  // the suggested places shipped with the app (before any search)
   function drawBig(){
     if(!bigLayers) return;
     bigLayers.clearLayers();
-    OSRM_ROUTE = null; routeLine = null; showRouteStats();
+    OSRM_ROUTE = null; showRouteStats();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
     if(a && b && state.from !== state.to) {
@@ -134,7 +132,6 @@ export default function App() {
               L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
               L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
               OSRM_ROUTE = {min: Math.round(data.routes[0].duration / 60), km: data.routes[0].distance / 1000};
-              if(!WALK_FOCUS) routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label (not over the walk)
               showRouteStats();
            }
         }).catch(e => console.error(e));
@@ -146,13 +143,13 @@ export default function App() {
       mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
       mk.on("click", function(){ openZone($("zoneChip")); });
     });
-    Object.keys(PLACE_LATLON).forEach(name => {
+    // only the pickup and drop-off carry a label; the suggested places are small dots named on hover/tap,
+    // and search results never land here unless picked (they used to pile up as permanent labels)
+    BASE_PLACES.concat([state.from, state.to]).filter(function(n, i, all){ return PLACE_LATLON[n] && all.indexOf(n) === i; }).forEach(name => {
        var p = PLACE_LATLON[name];
-       var isFrom = name === state.from, isTo = name === state.to;
-       var color = (isFrom || isTo) ? "#C4F135" : "#fff";
-       var radius = (isFrom || isTo) ? 8 : 5;
-       var marker = L.circleMarker([p.lat, p.lon], {radius: radius, color: "#101410", fillColor: color, fillOpacity: 1, weight: 2}).addTo(bigLayers);
-       marker.bindTooltip(name, {permanent: true, direction: "top", className: "map-label", offset: [0, -10]});
+       var isFrom = name === state.from, isTo = name === state.to, sel = isFrom || isTo;
+       var marker = L.circleMarker([p.lat, p.lon], {radius: sel ? 8 : 5, color: "#101410", fillColor: sel ? "#C4F135" : "#fff", fillOpacity: 1, weight: 2}).addTo(bigLayers);
+       marker.bindTooltip(name, {permanent: sel, direction: "top", className: "map-label", offset: [0, -10]});
        marker.on("click", function() {
           if (state.active === "from") { state.prevFrom = state.from; state.from = name; }
           else { state.to = name; }
@@ -258,7 +255,7 @@ export default function App() {
   function pick(name){
     state[state.active]=name;
     $(state.active==="from"?"qFrom":"qTo").value=name;
-    drawBig();
+    drawBig();renderRadar();  // the event chip follows the new pickup straight away
     if(state.active==="from"){setActive("to");$("qTo").focus({preventScroll:true});$("qTo").select()}
     else renderList("");
   }
@@ -1072,7 +1069,7 @@ export default function App() {
       <button className="fs-chip" id="zoneChip" type="button" aria-haspopup="dialog"><i></i><span id="chipText"></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <div className="fs-bottom">
         <p className="hint" id="hint">Choose pickup</p>
-          <div id="routeStats" className="caption" style={{ justifyContent: "center", margin: "4px 0" }}></div>
+        <div id="routeStats" className="route-stats"></div>
         <ul className="plist" id="plist"></ul>
         <button className="go" id="confirm" type="button">Confirm route</button>
       </div>
