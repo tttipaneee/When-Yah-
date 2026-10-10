@@ -42,6 +42,16 @@ def event_effect_validated() -> bool:
     return event_effect() is not None
 
 
+DECISION = ROOT / "reports" / "decision.json"
+
+
+def decision_rule() -> dict:
+    """Written by ml/evaluate.py: did the "Tunggu" odds rule beat book-now and hour-of-day on test days?"""
+    if not DECISION.exists():
+        return {"validated": False}
+    return json.loads(DECISION.read_text(encoding="utf-8"))
+
+
 def _rank(prices: dict[str, float]) -> list[str]:
     return sorted(prices, key=lambda a: prices[a])
 
@@ -85,15 +95,19 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
-    best = min(horizon, key=lambda h: h.pct_change)
-    # wait only if the expected saving beats the downside in the model's p90 band
-    wait = best.pct_change < 0 and -best.pct_change > max(best.pct_high, 0)
-    wait_minutes = best.minutes if wait else 0
+    # "Tunggu" = odds rule (wait 30 min when P(drop >= 10%) >= k x usual), served only if
+    # reports/decision.json says it beat both baselines on held-out data; otherwise always book now.
+    dec = decision_rule()
+    k = load_bundle().get("wait_k", {}).get(variant)
+    odds_high = k is not None and odds.p_save10 >= k * odds.typical_p_save10
+    wait = bool(dec["validated"]) and odds_high
+    best = h30
+    wait_minutes = 30 if wait else 0
     saving, risk = {}, {}
     if wait:
-        saving = {a: round(rm * -best.pct_change, 2) for a, rm in quotes.items()}
-        risk = {a: round(rm * max(best.pct_high, 0), 2) for a, rm in quotes.items()}
-    at_best = best.expected_rm if wait else quotes
+        saving = {a: round(rm * max(-h30.pct_change, 0), 2) for a, rm in quotes.items()}
+        risk = {a: round(rm * max(h30.pct_high, 0), 2) for a, rm in quotes.items()}
+    at_best = h30.expected_rm if wait else quotes
 
     reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
                    f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
@@ -105,11 +119,13 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         reasons.append("No usual price given: the model can't tell if this price is already high, "
                        "so it only advises waiting when time-of-day patterns are clear")
     if wait:
-        reasons.append(f"Lowest expected price at +{best.minutes} min ({best.pct_change:+.0%}, "
-                       f"range {best.pct_low:+.0%} to {best.pct_high:+.0%})")
+        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual — waiting 30 min "
+                       "is a reasonable bet (tested on held-out data, reports/metrics.md)")
+    elif odds_high:
+        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual, but no waiting rule "
+                       "beat a simple time-of-day rule on held-out data, so we don't advise waiting")
     else:
-        reasons.append(f"Expected saving from waiting does not beat the risk of a rise "
-                       f"(up to {best.pct_high:+.0%} at +{best.minutes} min)")
+        reasons.append("Odds of a drop are not above usual — book now")
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
@@ -119,7 +135,6 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                                               " (effect on price not validated)") for e in nearby]
     reasons += ev_reasons
     reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
-    reasons.append("On held-out data this advice did not beat a simple time-of-day rule; see reports/metrics.md")
     return ForecastResponse(
         datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,

@@ -36,6 +36,34 @@ def load_frame() -> pd.DataFrame:
     return df
 
 
+def clf_for(name: str, feats: list[str]) -> lgb.LGBMClassifier:
+    """with_level: smaller leaves + drop chance monotone in level (kept per reports/extreme_experiment.md)."""
+    if name != "with_level":
+        return lgb.LGBMClassifier(**PARAMS)
+    return lgb.LGBMClassifier(**{**PARAMS, "min_child_samples": 50},
+                              monotone_constraints=[1 if f == "level" else 0 for f in feats])
+
+
+K_GRID = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)
+
+
+def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
+    """"Tunggu" rule: wait 30 min when P(drop >= 10% at +30) >= k x the usual chance. k is picked on VAL days
+    (highest mean saving vs book now); None (= never advise waiting) if no k saves money on val."""
+    v = va[va.ratio_30.notna()]
+    p = bundle["models"][name][30]["clf"].predict_proba(v[bundle["features"][name]])[:, 1]
+    base = bundle["base_rate"][30]
+    best, best_saving = None, 0.0
+    for k in K_GRID:
+        wait = p >= k * base
+        saving = float(np.where(wait, 1 - v.ratio_30.to_numpy(), 0.0).mean())
+        print(f"  {name} k={k}: val waits {wait.mean():.2%}, mean saving {saving:+.3%}")
+        if saving > best_saving:
+            best, best_saving = k, saving
+    print(f"  {name}: chosen k = {best}")
+    return best
+
+
 def main() -> None:
     df = load_frame()
     tr, va = df[df.split == "train"], df[df.split == "val"]
@@ -52,7 +80,7 @@ def main() -> None:
             m = {"mean": lgb.LGBMRegressor(**PARAMS).fit(X, y),
                  "q10": lgb.LGBMRegressor(objective="quantile", alpha=0.1, **PARAMS).fit(X, y),
                  "q90": lgb.LGBMRegressor(objective="quantile", alpha=0.9, **PARAMS).fit(X, y),
-                 "clf": lgb.LGBMClassifier(**PARAMS).fit(X, d[f"drop10_{h}"].astype(int))}
+                 "clf": clf_for(name, feats).fit(X, d[f"drop10_{h}"].astype(int))}
             bundle["models"][name][h] = m
             v = va[va[f"drop10_{h}"].notna()]
             p = m["clf"].predict_proba(v[feats])[:, 1]
@@ -61,6 +89,7 @@ def main() -> None:
             bundle["threshold"][(name, h)] = float(thr[np.argmax(f1[:-1])])
             print(f"{name:10s} +{h:2d} min: n_train={len(d):,} val_thr={bundle['threshold'][(name, h)]:.3f} "
                   f"({time.time() - t0:.0f}s)")
+    bundle["wait_k"] = {name: choose_wait_k(bundle, name, va) for name in VARIANTS}
     MODEL.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, MODEL, compress=3)  # committed so the demo runs without the raw data
     print(f"saved {MODEL}")

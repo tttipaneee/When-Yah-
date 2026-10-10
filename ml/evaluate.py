@@ -5,6 +5,7 @@
 3. Forecast error: MAE of ratio vs persistence (ratio = 1) and vs hour-of-day average.
 Usage: python ml/evaluate.py
 """
+import json
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -83,6 +84,13 @@ def main() -> None:
     rows["Linear on level (1/level)"] = policy_stats(*decide(lin, None), actual, clusters)
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
+    # "Tunggu" odds rule (served): wait 30 min when P(drop >= 10% @30) >= k x usual chance; k picked on val
+    odds_wait = {}
+    for v in preds:
+        k = b.get("wait_k", {}).get(v)
+        w = preds[v]["p"][:, 1] >= k * b["base_rate"][30] if k else np.zeros(len(te), bool)
+        odds_wait[v] = (w, np.full(len(te), 1))  # horizon index 1 = +30 min
+        rows[f"When Yah? {v}, odds rule (k={k})"] = policy_stats(*odds_wait[v], actual, clusters)
     oracle_best = actual.argmin(axis=1)
     rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
         actual.min(axis=1) < 1, oracle_best, actual, clusters)
@@ -93,7 +101,8 @@ def main() -> None:
                            "Hour-of-day average ratio": decide(ha, None),
                            "Linear on level (1/level)": decide(lin, None),
                            "When Yah? no_level": decide(preds["no_level"]["mean"], preds["no_level"]["q90"]),
-                           "When Yah? with_level": decide(preds["with_level"]["mean"], preds["with_level"]["q90"])
+                           "When Yah? with_level": decide(preds["with_level"]["mean"], preds["with_level"]["q90"]),
+                           "When Yah? with_level, odds rule": odds_wait["with_level"],
                            }.items():
         surge_rows[name] = policy_stats(w[surge], bst[surge], actual[surge], clusters[surge])
 
@@ -181,6 +190,16 @@ def main() -> None:
           "  rider's band and drop chances may differ (likely a narrower band).",
           "- Patterns are learned in New York (Aug 2024) and applied to the user's local clock in Klang Valley.",
           "  They are not Malaysian data; typed quotes would become Malaysian training data (roadmap)."]
+    odr, ho_ = rows[f"When Yah? with_level, odds rule (k={b['wait_k']['with_level']})"], rows["Hour-of-day average ratio"]
+    validated = odr["lo"] > ho_["hi"] and odr["lo"] > 0
+    L += [f"- **\"Tunggu\" odds rule** (wait 30 min when the drop chance ≥ {b['wait_k']['with_level']}× usual; k picked on val): "
+          f"saving {pct(odr['saving'])} vs hour-of-day {pct(ho_['saving'])} → "
+          + ("**beats both baselines; the app may advise waiting.**" if validated else
+             "**does not beat the hour-of-day baseline; the app always says book now and shows the odds as information.**")]
+    (ROOT / "reports" / "decision.json").write_text(json.dumps(
+        {"validated": bool(validated), "rule": "wait 30 min if P(drop>=10% @30) >= k x usual",
+         "k": b["wait_k"]["with_level"], "test_saving": round(float(odr["saving"]), 5),
+         "hour_of_day_saving": round(float(ho_["saving"]), 5)}, indent=1), encoding="utf-8")
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 
