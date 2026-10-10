@@ -424,13 +424,17 @@ export default function App() {
     return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",hour12:false});
   }
   function renderChart(){
-    var W=320,H=150,L=34,R=14,T=16,B=26,ymax=6,ymin=-26;
+    var W=320,H=150,L=34,R=14,T=16,B=26;
+    // scale fits the forecast and its range in both directions (prices can be predicted to rise or fall)
+    var ks0=[0,15,30,45,60],hiV=Math.max.apply(0,ks0.map(function(k){return HI[k]})),loV=Math.min.apply(0,ks0.map(function(k){return LO[k]}));
+    var ymax=Math.max(6,Math.ceil((hiV+2)/5)*5),ymin=Math.min(-12,Math.floor((loV-2)/5)*5);
     var xs={0:L,15:L+(W-L-R)*0.25,30:L+(W-L-R)*0.5,45:L+(W-L-R)*0.75,60:W-R};
     function y(v){return T+(ymax-v)/(ymax-ymin)*(H-T-B)}
     var ks=[0,15,30,45,60],o="";
-    [0,-10,-20].forEach(function(g){
+    var grid=[];for(var g0=Math.ceil(ymin/10)*10;g0<=ymax;g0+=10)grid.push(g0);
+    grid.forEach(function(g){
       o+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(g)+'" y2="'+y(g)+'" stroke="'+(g===0?'#5B6755':'#D6E7BD')+'" stroke-width="1" '+(g===0?'stroke-dasharray="3 3"':'')+'/>'+
-           '<text x="'+(L-6)+'" y="'+(y(g)+3.5)+'" text-anchor="end">'+(g===0?'0%':g+'%')+'</text>';
+           '<text x="'+(L-6)+'" y="'+(y(g)+3.5)+'" text-anchor="end">'+(g===0?'0%':(g>0?'+':'')+g+'%')+'</text>';
     });
     var up=ks.map(function(k){return xs[k]+","+y(HI[k])}).join(" ");
     var dn=ks.slice().reverse().map(function(k){return xs[k]+","+y(LO[k])}).join(" ");
@@ -439,7 +443,7 @@ export default function App() {
     ks.forEach(function(k){
       var best=k===bestMin;
       o+='<circle cx="'+xs[k]+'" cy="'+y(PCT[k])+'" r="'+(best?7:4)+'" fill="'+(best?'#C4F135':'#101410')+'" stroke="#101410" stroke-width="'+(best?3:0)+'"/>';
-      if(k>0)o+='<text class="val" x="'+xs[k]+'" y="'+(y(PCT[k])+(best?22:17))+'" text-anchor="middle">'+PCT[k]+'%</text>';
+      if(k>0)o+='<text class="val" x="'+xs[k]+'" y="'+(y(PCT[k])+(best?22:17))+'" text-anchor="middle">'+(PCT[k]>0?'+':'')+PCT[k]+'%</text>';
       o+='<text x="'+xs[k]+'" y="'+(H-6)+'" text-anchor="middle">'+(k===0?"Now":"+"+k+"m")+'</text>';
     });
     $("chart").innerHTML=o;
