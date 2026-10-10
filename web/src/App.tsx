@@ -101,12 +101,12 @@ export default function App() {
   function initMaps() {
     if (!miniMapL) {
       miniMapL = L.map("miniSvg", {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([3.139, 101.686], 11);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(miniMapL);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"}).addTo(miniMapL);
       miniLayers = L.layerGroup().addTo(miniMapL);
     }
     if (!bigMapL) {
-      bigMapL = L.map("bigSvg", {zoomControl: false, attributionControl: false}).setView([3.139, 101.686], 12);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(bigMapL);
+      bigMapL = L.map("bigSvg", {zoomControl: false, attributionControl: true})  // OSM tile policy: credit required.setView([3.139, 101.686], 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"}).addTo(bigMapL);
       bigLayers = L.layerGroup().addTo(bigMapL);
     }
   }
