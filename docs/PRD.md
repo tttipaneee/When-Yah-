@@ -18,7 +18,7 @@ odds when the fare is far above normal (≈2× usual → ~45%).
 **Proof.** On held-out real ride data (19M NYC Uber/Lyft trips, Aug 2024) the odds are **calibrated**
 (when we say ~21%, it happened 21% of the time) and rise sharply when the price is far above normal.
 The "Tunggu" advice (wait 15–60 min when the odds of a ≥10% drop are clearly above usual; threshold set on
-validation days) **beats "book now" on held-out days** (+0.22%) but a simple "hour-of-day" rule saves slightly
+validation days; never below a 20% chance) **beats "book now" on held-out days** (+0.20%; +2.3% per wait) but a simple "hour-of-day" rule saves slightly
 more (+0.29%) — we say so (`reports/decision.json`). When prices are ≥1.5× usual they tend to fall back (~4–5%)
 whatever rule is used. About 4 in 10 waits still cost more; the app shows that. The "Tunggu" gate was changed
 after seeing test results (disclosed in `reports/metrics.md`) — exploratory. Experiments that failed are listed in §10.

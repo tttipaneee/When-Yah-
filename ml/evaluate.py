@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
 
 from ml.features import HORIZONS
-from ml.train import MODEL, drop_prob, load_frame, odds_multiples, tunggu
+from ml.train import MIN_WAIT_P, MODEL, base_rates, drop_prob, load_frame, odds_multiples, tunggu
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.md"
@@ -100,7 +100,7 @@ def main() -> None:
     odds_wait = {}
     for v in preds:
         k = b.get("wait_k", {}).get(v)
-        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k)
+        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k, base_rates(b))
         rows[f"When Yah? {v}, odds rule (k={k})"] = policy_stats(*odds_wait[v], actual, clusters)
     oracle_best = actual.argmin(axis=1)
     rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
@@ -206,7 +206,8 @@ def main() -> None:
     hour_pol = decide(ha, None)
     hi15 = te.level.to_numpy() >= 1.5
     decision = {"rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual "
-                        "chance) if it is >= k; k picked on val days",
+                        f"chance) if it is >= k AND P(drop>=10%) there >= {MIN_WAIT_P:.0%}; k picked on val days",
+                "min_wait_p": MIN_WAIT_P,
                 "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
                 "test_days": "2024-08-26..2024-08-31", "variants": {}}
     for v in preds:
@@ -235,7 +236,7 @@ def main() -> None:
                 "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3),
                 "hour_of_day_saving": round(float(sh15["saving"]), 4),
                 "always_wait_30_saving": round(float(aw["saving"]), 4)}
-        L += [f"- **\"Tunggu\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual; k picked on val): saving "
+        L += [f"- **\"Tunggu\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual and chance ≥ {MIN_WAIT_P:.0%}; k picked on val): saving "
               f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
               + ("**beats book now: the app may say \"Tunggu\"**" if ok else "**does not beat book now: the app says book now**")
               + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}; paired difference {pct(dm)}, "

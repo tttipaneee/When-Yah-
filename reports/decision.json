@@ -1,52 +1,53 @@
 {
- "rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual chance) if it is >= k; k picked on val days",
+ "rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual chance) if it is >= k AND P(drop>=10%) there >= 20%; k picked on val days",
+ "min_wait_p": 0.2,
  "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
  "test_days": "2024-08-26..2024-08-31",
  "variants": {
   "no_level": {
    "validated": true,
    "k": 1.0,
-   "test_saving": 0.00231,
+   "test_saving": 0.00064,
    "test_saving_ci": [
-    0.002,
-    0.00272
+    0.00049,
+    0.00083
    ],
-   "wait_rate": 0.3661,
-   "saving_when_wait": 0.0063,
-   "waits_cost_more": 0.454,
+   "wait_rate": 0.0403,
+   "saving_when_wait": 0.016,
+   "waits_cost_more": 0.415,
    "vs_hour_of_day": "loses to",
    "minus_hour_of_day": [
-    -0.00057,
-    -0.00095,
-    -0.00015
+    -0.00223,
+    -0.00257,
+    -0.00186
    ]
   },
   "with_level": {
    "validated": true,
-   "k": 1.25,
-   "test_saving": 0.00223,
+   "k": 1.0,
+   "test_saving": 0.00198,
    "test_saving_ci": [
-    0.00187,
-    0.00263
+    0.00169,
+    0.00228
    ],
-   "wait_rate": 0.1547,
-   "saving_when_wait": 0.0144,
-   "waits_cost_more": 0.414,
+   "wait_rate": 0.088,
+   "saving_when_wait": 0.0225,
+   "waits_cost_more": 0.392,
    "vs_hour_of_day": "loses to",
    "minus_hour_of_day": [
-    -0.00064,
-    -0.00104,
-    -0.00025
+    -0.0009,
+    -0.00129,
+    -0.00053
    ],
    "level_ge_1_5": {
     "windows": 255,
-    "wait_rate": 1.0,
-    "saving": 0.0449,
+    "wait_rate": 0.941,
+    "saving": 0.0434,
     "saving_ci": [
      0.0262,
-     0.0632
+     0.059
     ],
-    "waits_cost_more": 0.38,
+    "waits_cost_more": 0.379,
     "hour_of_day_saving": 0.0513,
     "always_wait_30_saving": 0.0406
    }

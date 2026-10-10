@@ -441,7 +441,10 @@ export default function App() {
   /* ---------- real model (./model.ts → /api/forecast) ---------- */
   function applyModel(r){
     r.horizon.forEach(function(h){PCT[h.minutes]=Math.round(h.pct_change*100);LO[h.minutes]=Math.round(h.pct_low*100);HI[h.minutes]=Math.round(h.pct_high*100)});
-    PDROP=r.wait_odds.p_save10;
+    // ring = chance at the advised wait (Tunggu X min), else the 30-min headline chance
+    var hw=r.decision==="wait"?r.horizon.filter(function(h){return h.minutes===r.wait_minutes})[0]:null;
+    PDROP=hw?hw.p_drop10:r.wait_odds.p_save10;
+    var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="drop ≥10%<br>in "+(hw?r.wait_minutes:30)+" min";
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
@@ -919,7 +922,7 @@ export default function App() {
           </div>
           <div className="ring" role="img" aria-label="Chance of a drop of 10 percent or more within 30 minutes">
             <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(16,20,16,.15)" strokeWidth="10"/><circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="#101410" strokeWidth="10" strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="263.9"/></svg>
-            <div className="n"><div><b id="pDrop">62%</b><em>drop ≥10%<br />in 30 min</em></div></div>
+            <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">drop ≥10%<br />in 30 min</em></div></div>
           </div>
         </section>
 

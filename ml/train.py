@@ -60,12 +60,24 @@ def odds_multiples(bundle: dict, name: str, X) -> np.ndarray:
     return np.c_[[drop_prob(ms[h], X) / bundle["base_rate"][h] for h in HORIZONS]].T
 
 
-def tunggu(mult: np.ndarray, k: float | None) -> tuple[np.ndarray, np.ndarray]:
-    """"Tunggu" rule: wait for the horizon with the best odds multiple, if it is >= k. -> (wait, horizon index)."""
+MIN_WAIT_P = 0.20  # product rule (Ravin, 10 Oct): never advise waiting below a 20% chance of a >= 10% drop
+
+
+def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """"Tunggu" rule: wait for the horizon with the best odds multiple if it is >= k AND the chance of a >= 10%
+    drop there is >= MIN_WAIT_P. base = usual chance per horizon. -> (wait, horizon index)."""
     best = mult.argmax(axis=1)
     if k is None:
         return np.zeros(len(mult), bool), best
-    return mult[np.arange(len(mult)), best] >= k, best
+    m = mult[np.arange(len(mult)), best]
+    wait = m >= k
+    if base is not None:
+        wait &= m * np.asarray(base)[best] >= MIN_WAIT_P
+    return wait, best
+
+
+def base_rates(bundle: dict) -> np.ndarray:
+    return np.array([bundle["base_rate"][h] for h in HORIZONS])
 
 
 def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
@@ -76,7 +88,7 @@ def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
     mult = odds_multiples(bundle, name, v[bundle["features"][name]])
     best, best_saving = None, 0.0
     for k in K_GRID:
-        wait, h = tunggu(mult, k)
+        wait, h = tunggu(mult, k, base_rates(bundle))
         saving = float(np.where(wait, 1 - actual[np.arange(len(v)), h], 0.0).mean())
         print(f"  {name} k={k}: val waits {wait.mean():.2%}, mean saving {saving:+.3%}")
         if saving > best_saving:

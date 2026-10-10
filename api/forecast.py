@@ -21,7 +21,7 @@ from api.fare import estimate as fare_estimate
 from api.traffic import predicted_minutes
 from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
-from ml.train import drop_prob
+from ml.train import MIN_WAIT_P, drop_prob
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "ml" / "models" / "lgbm_v1.joblib"
@@ -114,13 +114,14 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
     # "Tunggu" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
-    # (P(drop >= 10%) / usual chance) if it is >= k — only if that rule beat "book now" on held-out days.
+    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (20%, product rule)
+    # — only if that rule beat "book now" on held-out days.
     gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
     base = load_bundle()["base_rate"]
     mults = {h.minutes: h.p_drop10 / base[h.minutes] for h in horizon}
     best = max(horizon, key=lambda h: mults[h.minutes])
-    odds_high = k is not None and mults[best.minutes] >= k
+    odds_high = k is not None and mults[best.minutes] >= k and best.p_drop10 >= MIN_WAIT_P
     wait = bool(gate.get("validated")) and odds_high
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
@@ -177,7 +178,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
               f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well)"
               if surge else f"in NYC tests, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
               "on average (a simple time-of-day rule saved slightly more overall)")
-        reasons.append(f"Tunggu {best.minutes} min: odds of a ≥10% drop are {mults[best.minutes]:.1f}x the usual; "
+        reasons.append(f"Tunggu {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
+                       f"({mults[best.minutes]:.1f}x the usual); "
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high and traffic is not None and traffic.flipped_to_book_now:
         pass  # the traffic reason explains the book-now
@@ -190,7 +192,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                            f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
                            "a time-of-day pattern learned from NYC data; it can't see live KL traffic")
         else:
-            reasons.append("Odds of a drop are not clearly above usual — book now")
+            reasons.append(f"Book now: chance of a ≥10% drop is {best.p_drop10:.0%} at best (+{best.minutes} min), "
+                           f"under our {MIN_WAIT_P:.0%} minimum to advise waiting")
     if traffic_reason:
         reasons.append(traffic_reason)
     reasons.append("rain" if req.rain else "no rain")

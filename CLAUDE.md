@@ -72,7 +72,8 @@ Fill in as they're created; keep them working.
 - **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
-  CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k; `wait_minutes` = that horizon.
+  CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k **and** P(drop≥10%) there is ≥ 20%
+  (product rule; below that, "book now"); `wait_minutes` = that horizon.
   A reason starting "Tunggu" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
