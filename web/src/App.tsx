@@ -429,7 +429,7 @@ export default function App() {
   function requestModel(){
     var rk = routeKey();
     runModel({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
-      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats()})
+      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats();if(EARN_PENDING){EARN_PENDING=false;awardForecast()}})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
   function realOnly(){
@@ -592,7 +592,7 @@ export default function App() {
     var o=resOpener||$("predict");
     if(!noFocus&&document.body.contains(o))o.focus({preventScroll:true});
   }
-  $("predict").onclick=function(){openRes(this)};
+  $("predict").onclick=function(){EARN_PENDING=true;openRes(this)};  // points only for a forecast the user asked for
   $("closeRes").onclick=function(){closeRes()};
   function setResRoute(){$("resRoute").textContent=state.from+" to "+state.to}
 
@@ -610,6 +610,7 @@ export default function App() {
 
   document.addEventListener("keydown",function(e){
     if(e.key!=="Escape")return;
+    if($("lb").classList.contains("on")){closeLb();return}
     if($("zoneSheet").classList.contains("on")){closeZone();return}
     if($("fs").classList.contains("on")){closeFs();return}
     if($("res").classList.contains("on"))closeRes();
@@ -632,6 +633,7 @@ export default function App() {
     var g=b.dataset.go,sc=$("scroll");
     if(g==="top")sc.scrollTo({top:0,behavior:"smooth"});
     else if(g==="events")sc.scrollTo({top:sc.scrollHeight,behavior:"smooth"});
+    else if(g==="leaderboard")openLb();
     else toast("Proof: odds tested on 19M real rides (reports/metrics.md)");
   });
   $("eventBtn").onclick=function(){openZone(this)};
@@ -669,9 +671,90 @@ export default function App() {
              quoted:q?q.price:null,decision:MODEL.decision,wait_minutes:MODEL.wait_minutes,
              expected_after_wait:hw&&hw.expected_rm[app]!=null?hw.expected_rm[app]:null};
       try{var all=fareList();all.push(f);localStorage.setItem(FARE_STORE,JSON.stringify(all))}catch(e){}
-      el.innerHTML=fareThanks(f);toast("Thanks — fare saved on this phone");
+      el.innerHTML=fareThanks(f);earn(25,"Fare reported");
     };
   }
+  /* ---------- points + leaderboard (points saved on this phone; friends are labelled examples) ---------- */
+  var PTS_STORE="whenyah.points",DAY_CAP=150,REPEAT_MIN=10,EARN_PENDING=false;
+  function klDay(){return new Date(Date.now()+8*3600000).toISOString().slice(0,10)}
+  function klWeek(){  // ISO week id in KL time, e.g. "2026-W41"
+    var d=new Date(Date.now()+8*3600000);d.setUTCHours(0,0,0,0);d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+    var y=new Date(Date.UTC(d.getUTCFullYear(),0,1));return d.getUTCFullYear()+"-W"+Math.ceil(((d-y)/86400000+1)/7);
+  }
+  function ptsLoad(){
+    var p;try{p=JSON.parse(localStorage.getItem(PTS_STORE)||"null")}catch(e){p=null}
+    p=p||{total:0,week:{id:"",pts:0},day:{date:"",pts:0},routes:{},anchor:{}};
+    if(p.week.id!==klWeek())p.week={id:klWeek(),pts:0};
+    if(p.day.date!==klDay())p.day={date:klDay(),pts:0};
+    return p;
+  }
+  function ptsSave(p){try{localStorage.setItem(PTS_STORE,JSON.stringify(p))}catch(e){}}
+  function ptsShow(){var p=ptsLoad();$("ptsVal").textContent=String(p.total)}
+  function earn(n,why){
+    var p=ptsLoad(),got=Math.max(0,Math.min(n,DAY_CAP-p.day.pts));
+    if(!got){toast("Daily limit reached ("+DAY_CAP+" pts)");return 0}
+    p.total+=got;p.week.pts+=got;p.day.pts+=got;ptsSave(p);ptsShow();
+    toast("+"+got+" pts · "+why+(got<n?" (daily limit)":""));
+    if($("lb").classList.contains("on"))renderLb();
+    return got;
+  }
+  function awardForecast(){  // 10 pts + 5 per extra quoted app (max 3); same route again within 10 min earns nothing
+    var n=state.quotes.filter(function(x){return x.price>0}).length;if(!n)return;
+    var p=ptsLoad(),rk=routeKey(),now=Date.now();
+    if(p.routes[rk]&&now-p.routes[rk]<REPEAT_MIN*60000){toast("No points: same route in the last "+REPEAT_MIN+" min");return}
+    p.routes[rk]=now;ptsSave(p);
+    var extra=Math.min(3,n-1);
+    earn(10+5*extra,extra?"Prices shared ("+n+" apps)":"Forecast run");
+  }
+  var FRIENDS=[["Aina","#F26B1D"],["Wei Jie","#3D7BE0"],["Priya","#9B5DE5"],["Hafiz","#2A9D8F"],["Mei Ling","#E63973"],["Arjun","#E9A23B"]];
+  // Example friends: scores are set once per week (and once for all time) around your points at first look,
+  // so you start 3rd, 20 pts behind 2nd. Not real users.
+  var OFFSETS={week:[55,20,-6,-12,-19,-25],all:[240,20,-15,-40,-70,-95]};
+  var LB_VIEW="week";
+  function lbRows(view){
+    var p=ptsLoad(),mine=view==="week"?p.week.pts:p.total,ak=view==="week"?p.week.id:"all";
+    if(p.anchor[view]==null||p.anchor[view+"_id"]!==ak){p.anchor[view]=mine;p.anchor[view+"_id"]=ak;ptsSave(p)}
+    var rows=FRIENDS.map(function(f,i){return {name:f[0],color:f[1],pts:Math.max(0,p.anchor[view]+OFFSETS[view][i]),me:false}});
+    rows.push({name:"You",color:"#101410",pts:mine,me:true});
+    rows.sort(function(a,b){return b.pts-a.pts||(a.me?-1:b.me?1:0)});  // ties: you first
+    return rows;
+  }
+  function avatar(r,big){
+    return '<span class="lb-av'+(big?" big":"")+'" style="background:'+r.color+'">'+esc(r.me?"You":r.name.split(" ").map(function(w){return w[0]}).join(""))+'</span>';
+  }
+  function renderLb(){
+    var rows=lbRows(LB_VIEW),i=rows.findIndex(function(r){return r.me}),me=rows[i],next=i>0?rows[i-1]:null;
+    var toggle='<div class="lb-toggle" role="tablist">'+["week","all"].map(function(v){
+      return '<button type="button" role="tab" data-view="'+v+'" aria-selected="'+(LB_VIEW===v)+'">'+(v==="week"?"This week":"All time")+'</button>'}).join("")+'</div>';
+    var you='<section class="card lb-you">'+avatar(me,true)+'<div><div class="k2">Your rank</div><b class="lb-rank">#'+(i+1)+' of '+rows.length+'</b>'+
+      '<small>'+me.pts+' pts'+(next?' · '+(next.pts-me.pts+1)+' pts to pass '+esc(next.name):' · you are on top')+'</small></div></section>';
+    var top=rows.slice(0,3),order=[1,0,2];
+    var podium='<div class="lb-podium">'+order.map(function(k){var r=top[k];if(!r)return "";
+      return '<div class="lb-step s'+(k+1)+(r.me?" me":"")+'">'+avatar(r)+'<b>'+esc(r.name)+'</b><small>'+r.pts+' pts</small><div class="lb-block">'+(k+1)+'</div></div>'}).join("")+'</div>';
+    var list='<div class="rank">'+rows.map(function(r,k){
+      return '<div class="rk'+(r.me?" best":"")+'"><span class="lb-n">'+(k+1)+'</span><span class="lb-who">'+avatar(r)+'<b>'+esc(r.name)+'</b></span><span class="p"><strong>'+r.pts+'</strong><small> pts</small></span></div>'}).join("")+'</div>';
+    var how='<section class="card"><h2>How to earn points</h2><table class="lb-how"><tbody>'+
+      '<tr><td>Run a forecast</td><td>10 pts + 5 per extra app quote (up to 3). Same route again within '+REPEAT_MIN+' min: no points.</td></tr>'+
+      '<tr><td>Report what you paid</td><td>25 pts, once per forecast</td></tr></tbody></table>'+
+      '<p class="sub">Daily limit '+DAY_CAP+' pts. Your points are saved on this phone.</p></section>';
+    $("lbBody").innerHTML=toggle+you+'<section class="card">'+podium+list+
+      '<p class="why-src">Example friends — not real users. Friends and sharing are on our roadmap.</p></section>'+how;
+  }
+  function openLb(){
+    renderLb();$("lb").classList.add("on");$("lb").setAttribute("aria-hidden","false");
+    setTimeout(function(){$("closeLb").focus({preventScroll:true})},240);
+  }
+  function closeLb(){
+    $("lb").classList.remove("on");$("lb").setAttribute("aria-hidden","true");
+    document.querySelectorAll(".nav button").forEach(function(x){
+      if(x.dataset.go==="top")x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
+  }
+  $("closeLb").onclick=function(){closeLb()};
+  $("ptsChip").onclick=function(){openLb()};
+  $("lbBody").addEventListener("click",function(e){
+    var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();
+  });
+  ptsShow();
   function fareThanks(f){
     var line=f.quoted!=null?"You saw "+rm(f.quoted)+" on "+APP_NAME[f.app]+" when you checked and paid "+rm(f.paid)+
       " ("+(f.paid-f.quoted>0.004?rm(f.paid-f.quoted)+" more":f.quoted-f.paid>0.004?rm(f.quoted-f.paid)+" less":"the same")+")."
@@ -747,7 +830,13 @@ export default function App() {
               <div className="title">When Yah?</div>
             </div>
           </div>
-          <div className="chip"><span className="dot"></span>Klang Valley</div>
+          <div className="top-chips">
+            <button className="chip pts" id="ptsChip" type="button" aria-label="Your points, open leaderboard">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+              <span id="ptsVal">0</span> pts
+            </button>
+            <div className="chip"><span className="dot"></span>Klang Valley</div>
+          </div>
         </header>
 
         {/* route */}
@@ -817,10 +906,23 @@ export default function App() {
             <button type="button" data-go="events" aria-label="Events">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
       </button>
+      <button type="button" data-go="leaderboard" aria-label="Leaderboard">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
+      </button>
       <button type="button" data-go="metrics" aria-label="Proof and metrics">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
       </button>
     </nav>
+
+    <div className="res" id="lb" role="dialog" aria-modal="true" aria-label="Leaderboard" aria-hidden="true">
+      <div className="res-scroll">
+        <div className="res-top">
+          <button className="back" id="closeLb" type="button" aria-label="Back to home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+          <div className="res-ttl"><div className="title">Leaderboard</div><div className="hello">Points for sharing prices and fares</div></div>
+        </div>
+        <div className="stack" id="lbBody"></div>
+      </div>
+    </div>
 
     <div className="res" id="res" role="dialog" aria-modal="true" aria-label="Your forecast" aria-hidden="true">
       <div className="res-scroll" id="resScroll">

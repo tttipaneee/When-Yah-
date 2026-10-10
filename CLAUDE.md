@@ -92,6 +92,10 @@ Fill in as they're created; keep them working.
   (`wait` iff decision is wait; `urgent` if jam ahead, event ending soon or rising). Labels only, no new numbers.
 - "Booked? Tell us what you paid" card: app + RM paid, stored in the browser's localStorage (`whenyah.fares`) only,
   never sent; the thank-you compares the typed quote (and the expected price after waiting, if advised) with the fare paid.
+- Points + Leaderboard (frontend only, localStorage `whenyah.points`): forecast the user asked for = 10 pts + 5 per
+  extra quoted app (max 3), same route within 10 min = 0; fare report = 25 pts once per forecast; 150 pts/day cap.
+  Leaderboard tab (trophy) + header points chip. The six friends are **labelled example data** ("Example friends — not
+  real users"), scored around the user's points at first look each week; no friends map, no location sharing.
 - `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as
   `reports/case_studies.md`, checked by a test). Shown in the "What we saw in real ride data" card (no city named there).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).
