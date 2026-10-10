@@ -621,7 +621,8 @@ export default function App() {
     FARE_KEY=key+quoted.join();
     var done=fareList().filter(function(f){return f.key===key})[0];
     if(done){el.innerHTML=fareThanks(done);return}
-    var apps=quoted.length?quoted:Object.keys(APP_NAME);
+    // all three apps (you may have booked on one you didn't quote); the ones you quoted first
+    var apps=quoted.concat(Object.keys(APP_NAME).filter(function(x){return quoted.indexOf(x)<0}));
     // same app switch + price-tag field as the home price card; saved in this browser only
     el.innerHTML='<form class="fare2" id="fareForm" novalidate><input type="hidden" id="fareApp" value="'+apps[0]+'">'+
       '<div class="qchips" role="group" aria-label="App you booked" style="grid-template-columns:repeat('+apps.length+',minmax(0,1fr))">'+apps.map(function(a,i){
