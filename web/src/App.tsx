@@ -220,9 +220,31 @@ export default function App() {
       L.circleMarker([v.lat, v.lon], {radius: 6, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(miniLayers);
     }
   }
+  // Route time + distance: TomTom traffic-aware "leave now" (via /api/forecast) when the API has it,
+  // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
+  var OSRM_ROUTE = null, routeLine = null, MODEL_ROUTE = "";
+  function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
+  function routeText(){
+    var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
+    if(t && t.minutes && t.minutes["0"] != null && t.km != null)
+      return {html: "<b>" + Math.round(t.minutes["0"]) + " min</b> now with traffic · " + t.km.toFixed(1) + " km",
+              src: "TomTom traffic prediction"};
+    if(OSRM_ROUTE) return {html: "<b>" + OSRM_ROUTE.min + " min</b> without traffic · " + OSRM_ROUTE.km.toFixed(1) + " km",
+                           src: "OpenStreetMap route"};
+    return null;
+  }
+  function showRouteStats(){
+    var r = routeText(), rs = document.getElementById("routeStats");
+    if(rs) rs.innerHTML = r ? '<span>' + r.html + ' <span style="opacity:.6">· ' + esc(r.src) + '</span></span>' : "";
+    if(routeLine){
+      routeLine.unbindTooltip();
+      if(r) routeLine.bindTooltip(r.html, {permanent: true, direction: "center", className: "map-label"}).openTooltip();
+    }
+  }
   function drawBig(){
     if(!bigLayers) return;
     bigLayers.clearLayers();
+    OSRM_ROUTE = null; routeLine = null; showRouteStats();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
     if(a && b && state.from !== state.to) {
@@ -235,10 +257,9 @@ export default function App() {
               var coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
               L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
-              var distKm = (data.routes[0].distance / 1000).toFixed(1);
-              var durMin = Math.round(data.routes[0].duration / 60);
-              var rs = document.getElementById("routeStats");
-              if (rs) rs.innerHTML = "<b>" + durMin + " min</b> driving (" + distKm + " km)";
+              OSRM_ROUTE = {min: Math.round(data.routes[0].duration / 60), km: data.routes[0].distance / 1000};
+              routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label
+              showRouteStats();
            }
         }).catch(e => console.error(e));
     }
@@ -458,8 +479,9 @@ export default function App() {
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
+    var rk = routeKey();
     runModel({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
-      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}})
+      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats()})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
   function realOnly(){

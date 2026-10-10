@@ -170,3 +170,36 @@ def test_grab_per_minute_note_when_trip_gets_longer(monkeypatch):
     assert any("per-minute charge" in r for r in d["reasons"])
     no_grab = {**body, "quotes": [{"app": "indrive", "price_rm": 15.0}]}
     assert not any("per-minute" in r for r in client.post("/api/forecast", json=no_grab).json()["reasons"])
+
+
+def test_wait_never_shown_while_expected_price_rises():
+    # sweep a day of times and prices: whenever the answer is "Wait", the expected price there is below now
+    for hh in range(6, 24, 2):
+        for price in (15.0, 25.0, 40.0):
+            body = {**BODY, "datetime": f"2026-10-16T{hh:02d}:10:00+08:00",
+                    "quotes": [{"app": "grab", "price_rm": price}], "usual_price_rm": 20.0}
+            d = client.post("/api/forecast", json=body).json()
+            if d["decision"] == "wait":
+                h = next(x for x in d["horizon"] if x["minutes"] == d["wait_minutes"])
+                assert h["pct_change"] < 0
+
+
+def test_route_km_and_minutes_now_for_the_map(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 18.0, 15: 19.0, 30: 20.0, 45: 20.0, 60: 20.0})
+    monkeypatch.setattr(f, "route_km_now", lambda a, b, t: 7.4)
+    body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
+    d = client.post("/api/forecast", json=body).json()
+    assert d["traffic"]["km"] == 7.4 and d["traffic"]["minutes"]["0"] == 18.0
+
+
+def test_event_exit_hint_in_words_only_near_end():
+    from api.forecast import event_effect
+    zepp = {"lat": 3.1394413, "lon": 101.7091281}  # Eunji concert ends 23:00 on 11 Oct (published end)
+    near_end = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp}).json()
+    early = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T20:30:00+08:00", "pickup": zepp}).json()
+    hint = [r for r in near_end["reasons"] if r.startswith("Event ending right here")]
+    assert not any(r.startswith("Event ending right here") for r in early["reasons"])
+    if event_effect():
+        assert hint and "book before 23:00" in hint[0]
+        assert "%" not in hint[0] and "NYC" not in hint[0] and "New York" not in hint[0]

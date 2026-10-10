@@ -74,14 +74,16 @@ Fill in as they're created; keep them working.
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
   CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k **and** P(drop≥10%) there is ≥ 20%
-  (product rule; below that, "book now"); `wait_minutes` = that horizon.
+  (product rule; below that, "book now") **and** the expected `pct_change` there is < 0 (product rule, 10 Oct: never
+  "Wait" next to a rising line); `wait_minutes` = that horizon.
   A reason starting "Wait" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
 - Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
   are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
-  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now} | null`. A departure ≥ 25% longer than now
+  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now, km} | null` (`km` = TomTom route length for
+  leaving now; the map labels the route with `minutes["0"]` + `km`, else the OSRM no-traffic route). A departure ≥ 25% longer than now
   = jam: "Wait" flips to "Book now — jam coming". If a Grab quote's trip gets ≥ 10% (and 3 min) longer later, the reason adds
   that Grab's fare includes a per-minute charge (Grab fare structure, Jan 2023), in words only. Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
@@ -92,6 +94,8 @@ Fill in as they're created; keep them working.
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
   Forecast events carry `km` and `level`: `right_here` (≤ 1 km ≈ the venue's own NYC taxi zone, where post-game effects
   were measured) or `in_area` (≤ 5 km, product choice, information only). The map draws a dashed 1 km circle per venue.
+  Exit hint: for a `right_here` event with a published `end`, from 30 min before to 45 min after it, a reason starting
+  "Event ending right here" says in words (no %) that prices next to a venue went up after big events ended.
 - `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
   calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).

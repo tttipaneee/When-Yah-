@@ -18,7 +18,7 @@ from fastapi import HTTPException
 
 from api.events import events_near, haversine_km
 from api.fare import estimate as fare_estimate
-from api.traffic import predicted_minutes
+from api.traffic import predicted_minutes, route_km_now
 from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
 from ml.train import MIN_WAIT_P, drop_prob
@@ -123,7 +123,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     mults = {h.minutes: h.p_drop10 / base[h.minutes] for h in horizon}
     best = max(horizon, key=lambda h: mults[h.minutes])
     odds_high = k is not None and mults[best.minutes] >= k and best.p_drop10 >= MIN_WAIT_P
-    wait = bool(gate.get("validated")) and odds_high
+    # product rule (10 Oct, same as ml/train.tunggu): never "Wait" while the expected price there is not below now
+    falling = best.pct_change < 0
+    wait = bool(gate.get("validated")) and odds_high and falling
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
     # if waiting puts the trip in much heavier traffic, don't advise waiting.
@@ -158,8 +160,10 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
             traffic_reason += (f". Leaving at {at(worst)} takes {tm[worst] - now_min:.0f} min longer, and Grab's fare "
                                "includes a per-minute charge (Grab fare structure, Jan 2023), so the later trip "
                                "likely costs more")
+        km_now = (route_km_now((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon), req.datetime)
+                  if req.traffic_min is None and req.pickup and req.dropoff else None)
         traffic = TrafficInfo(source=src, minutes=tm, jam_ahead=jam,
-                              flipped_to_book_now=flipped)
+                              flipped_to_book_now=flipped, km=km_now)
     wait_minutes = best.minutes if wait else 0
     saving, risk = {}, {}
     if wait:
@@ -191,6 +195,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high and traffic is not None and traffic.flipped_to_book_now:
         pass  # the traffic reason explains the book-now
+    elif odds_high and not falling:
+        reasons.append(f"Book now: the chance of a ≥10% drop by +{best.minutes} min is {best.p_drop10:.0%}, but the "
+                       f"expected price then is {best.pct_change:+.0%} — not lower than now")
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
@@ -216,6 +223,17 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         events.append(ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None, km=km, level=lvl))
         where = (f"Event right here ({km:.1f} km)" if lvl == "right_here" else
                  f"Event in the area ({km:.1f} km)" if lvl else "Event today")
+        # Exit hint (words only, no %): validated window is 0-45 min after the end (reports/event_effect.md);
+        # shown from 30 min before a published end, for pickups right here
+        # (own prefix so the web app, which redraws the "Event right here" rows itself, still shows it)
+        to_end = (e.end - req.datetime).total_seconds() / 60 if e.end else None
+        if eff and lvl == "right_here" and to_end is not None and -45 <= to_end <= 30:
+            ev_reasons.append(
+                f"Event ending right here: {e.name} " + (f"ends at {e.end:%H:%M}" if to_end > 0 else
+                                                         f"ended at {e.end:%H:%M}")
+                + ". In our ride data, prices right next to a venue went up for up to ~45 min after a big event "
+                "ended" + (f" — book before {e.end:%H:%M} if you can" if to_end > 0 else "")
+                + " (not yet measured in Malaysia)")
         ev_reasons.append(f"{where}: {e.name}" + (
             " — in our training data, prices within ~1 km of a stadium rose right after games; not measured for "
             "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))

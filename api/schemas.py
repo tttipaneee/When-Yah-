@@ -73,6 +73,7 @@ class TrafficInfo(BaseModel):
     minutes: dict[int, float]
     jam_ahead: bool          # some departure in the next 60 min is >= 25% longer than leaving now
     flipped_to_book_now: bool
+    km: float | None = None  # route length for leaving now (TomTom), shown on the map with minutes[0]
 
 
 class ForecastResponse(BaseModel):

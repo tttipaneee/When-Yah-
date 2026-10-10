@@ -100,7 +100,7 @@ def main() -> None:
     odds_wait = {}
     for v in preds:
         k = b.get("wait_k", {}).get(v)
-        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k, base_rates(b))
+        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k, base_rates(b), preds[v]["mean"])
         rows[f"When Yah? {v}, odds rule (k={k})"] = policy_stats(*odds_wait[v], actual, clusters)
     oracle_best = actual.argmin(axis=1)
     rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
@@ -206,7 +206,8 @@ def main() -> None:
     hour_pol = decide(ha, None)
     hi15 = te.level.to_numpy() >= 1.5
     decision = {"rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual "
-                        f"chance) if it is >= k AND P(drop>=10%) there >= {MIN_WAIT_P:.0%}; k picked on val days",
+                        f"chance) if it is >= k AND P(drop>=10%) there >= {MIN_WAIT_P:.0%} AND the expected price "
+                        "there is below the price now; k picked on val days",
                 "min_wait_p": MIN_WAIT_P,
                 "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
                 "test_days": "2024-08-26..2024-08-31", "variants": {}}
@@ -236,7 +237,7 @@ def main() -> None:
                 "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3),
                 "hour_of_day_saving": round(float(sh15["saving"]), 4),
                 "always_wait_30_saving": round(float(aw["saving"]), 4)}
-        L += [f"- **\"Wait\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual and chance ≥ {MIN_WAIT_P:.0%}; k picked on val): saving "
+        L += [f"- **\"Wait\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual, chance ≥ {MIN_WAIT_P:.0%} and expected price below now; k picked on val): saving "
               f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
               + ("**beats book now: the app may say \"Wait\"**" if ok else "**does not beat book now: the app says book now**")
               + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}; paired difference {pct(dm)}, "
@@ -251,7 +252,11 @@ def main() -> None:
           "results. The original gate required beating both \"book now\" and the hour-of-day rule; the rule failed "
           "it. The new gate (beat \"book now\" only) was chosen with knowledge of the test numbers, so treat the "
           "\"Wait\" result as exploratory. k is sensitive: calibrating on Aug 22–23 and choosing k on Aug 24–25 "
-          "picks k = 1.5 instead of 1.25 (test saving +0.19% instead of +0.22%)."]
+          "picks k = 1.5 instead of 1.25 (test saving +0.19% instead of +0.22%).", "",
+          "**Disclosure (2).** On 10 Oct 2026 we added a product rule: never say \"Wait\" while the expected price at "
+          "that horizon is at or above the price now (the app had shown \"Wait\" next to a rising forecast line). "
+          "It was added for consistency of the advice, not tuned on test numbers; k was re-picked on val days and the "
+          "test numbers above are re-run with the rule."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}
                   for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]
