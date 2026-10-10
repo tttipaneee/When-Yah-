@@ -447,7 +447,7 @@ export default function App() {
   /* ---------- real model (./model.ts → /api/forecast) ---------- */
   function applyModel(r){
     r.horizon.forEach(function(h){PCT[h.minutes]=Math.round(h.pct_change*100);LO[h.minutes]=Math.round(h.pct_low*100);HI[h.minutes]=Math.round(h.pct_high*100)});
-    // ring = chance at the advised wait (Tunggu X min), else the 30-min headline chance
+    // ring = chance at the advised wait (Wait X min), else the 30-min headline chance
     var hw=r.decision==="wait"?r.horizon.filter(function(h){return h.minutes===r.wait_minutes})[0]:null;
     PDROP=hw?hw.p_drop10:r.wait_odds.p_save10;
     var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="drop ≥10%<br>in "+(hw?r.wait_minutes:30)+" min";
@@ -476,10 +476,10 @@ export default function App() {
     renderRadar();  // pickup may have changed
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
-    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Tunggu "+bestMin+" min":"Tempah sekarang";
-    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Tunggu")===0})[0]:null;
+    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Predicting…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
+    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
     $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
-      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Tunggu \d+ min: /,""))+".":
+      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Wait \d+ min: /,""))+".":
       "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
     $("bestAt").textContent=hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";
@@ -693,8 +693,8 @@ export default function App() {
       return '<div class="zs-status '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
         (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><small>'+lvl+'</small> · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
     }).join(""):'<div class="empty">No real events listed for today.</div>';
-    var note='<div class="zs-sec"><p class="sub">The orange '+HERE_KM+' km circle on the map is about the area where our New York data saw prices '+
-      'rise right after games (Yankee Stadium, its own taxi zone). It has not been measured in Malaysia, so no % is shown. '+
+    var note='<div class="zs-sec"><p class="sub">The orange '+HERE_KM+' km circle on the map is about the area where our training data saw prices '+
+      'rise right after big games. It has not been measured in Malaysia, so no % is shown. '+
       'Each event links to its source.</p></div>';
     var acts='<div class="zs-acts"><button class="go" id="zsForecast" type="button">See forecast</button><button class="ghost" id="zsGot" type="button">Got it</button></div>';
     $("zsBody").innerHTML=head+rows+note+acts;
@@ -873,10 +873,10 @@ export default function App() {
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
           <div className="qrow">
-            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Harga biasa (optional)" aria-label="Usual price for this trip (optional)" /></div>
-            <label className="ghost"><input id="rain" type="checkbox" /> Hujan</label>
+            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Usual price (optional)" aria-label="Usual price for this trip (optional)" /></div>
+            <label className="ghost"><input id="rain" type="checkbox" /> Rain</label>
           </div>
-          <p className="note">Tahu harga biasa? Masukkan untuk ramalan lebih tepat.</p>
+          <p className="note">Know your usual price for this trip? Add it for a sharper forecast.</p>
           <div className="row-actions">
             <button className="ghost" id="addApp" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
@@ -964,7 +964,7 @@ export default function App() {
           <div className="rank" id="rank"></div>
         </section>
 
-        <p className="foot">Forecast from our model, tested on 19M real ride-hailing trips (NYC, Aug 2024), applied to your typed prices and local time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
+        <p className="foot">Trained and tested on 19M real ride-hailing trips (NYC TLC Uber/Lyft records, Aug 2024), applied to your typed prices and local KL time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
 
         </div>
       </div>

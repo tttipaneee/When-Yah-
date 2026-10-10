@@ -50,7 +50,7 @@ DECISION = ROOT / "reports" / "decision.json"
 
 
 def decision_rule() -> dict:
-    """Written by ml/evaluate.py: per variant, did the "Tunggu" rule beat book-now on held-out test days?"""
+    """Written by ml/evaluate.py: per variant, did the "wait" rule beat book-now on held-out test days?"""
     if not DECISION.exists():
         return {}
     return json.loads(DECISION.read_text(encoding="utf-8"))
@@ -113,7 +113,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
-    # "Tunggu" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
+    # "Wait" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
     # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (20%, product rule)
     # — only if that rule beat "book now" on held-out days.
     gate = decision_rule().get("variants", {}).get(variant, {})
@@ -165,8 +165,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     if variant == "with_level":
         clipped = " (clipped to the training range)" if not LEVEL_RANGE[0] <= level <= LEVEL_RANGE[1] else ""
         reasons.append(f"Your quote is {level - 1:+.0%} vs your usual price{clipped}")
-        if level >= 1.2:  # "Kenapa mahal?" — see reports/traffic_experiment.md
-            reasons.append(f"Kenapa mahal? Your price is {level:.1f}x your usual. Time of day, weather and traffic "
+        if level >= 1.2:  # "Why so pricey?" — see reports/traffic_experiment.md
+            reasons.append(f"Why so pricey? Your price is {level:.1f}x your usual. Time of day, weather and traffic "
                            "explain very little of a high price in our tests; the rest is demand and driver "
                            "numbers that only the app can see")
     elif variant == "no_level":
@@ -174,11 +174,11 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                        "so it only advises waiting when time-of-day patterns are clear")
     if wait:
         surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
-        ev = (f"in NYC tests, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
+        ev = (f"in our tests on real ride data, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
               f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well)"
-              if surge else f"in NYC tests, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
+              if surge else f"in our tests on real ride data, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
               "on average (a simple time-of-day rule saved slightly more overall)")
-        reasons.append(f"Tunggu {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
+        reasons.append(f"Wait {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
                        f"({mults[best.minutes]:.1f}x the usual); "
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high and traffic is not None and traffic.flipped_to_book_now:
@@ -190,7 +190,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         if rise.pct_change >= 0.015:  # model expects the price to edge up (e.g. toward the evening peak)
             reasons.append(f"Book now: the model expects the price to edge up by +{rise.minutes} min "
                            f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
-                           "a time-of-day pattern learned from NYC data; it can't see live KL traffic")
+                           "a time-of-day pattern from our training data; it can't see live traffic")
         else:
             reasons.append(f"Book now: chance of a ≥10% drop is {best.p_drop10:.0%} at best (+{best.minutes} min), "
                            f"under our {MIN_WAIT_P:.0%} minimum to advise waiting")
@@ -208,10 +208,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         where = (f"Event right here ({km:.1f} km)" if lvl == "right_here" else
                  f"Event in the area ({km:.1f} km)" if lvl else "Event today")
         ev_reasons.append(f"{where}: {e.name}" + (
-            " — in New York data, prices in a stadium's own area (~1 km) rose right after games; not measured for "
+            " — in our training data, prices within ~1 km of a stadium rose right after games; not measured for "
             "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))
     reasons += ev_reasons
-    reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
     return ForecastResponse(
         datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,

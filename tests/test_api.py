@@ -68,7 +68,7 @@ def test_demo_scenarios_run_real_forecast():
     r = client.get("/api/demo")
     assert r.status_code == 200
     d = r.json()
-    assert len(d) == 4 and all(s["label"].startswith("contoh") for s in d)
+    assert len(d) == 4 and all(s["label"].startswith("example") for s in d)
     for s in d:
         assert s["response"]["model_version"].startswith("lgbm_v1/")
         assert set(s["response"]["wait_odds"]["rm_range"]) == {q["app"] for q in s["request"]["quotes"]}
@@ -106,7 +106,7 @@ def test_tunggu_only_when_rule_validated_and_odds_high():
     gate = decision_rule().get("variants", {}).get("with_level", {})
     if d["decision"] == "wait":
         assert gate.get("validated") and d["wait_minutes"] in (15, 30, 45, 60)
-        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Tunggu") for r in d["reasons"])
+        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Wait ") for r in d["reasons"])
     quiet = {**BODY, "datetime": "2026-10-13T14:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 12.0}],
              "usual_price_rm": 15.0}
     assert client.post("/api/forecast", json=quiet).json()["decision"] == "book_now"
@@ -121,7 +121,7 @@ def test_traffic_jam_flips_tunggu_and_warns():
         d = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 32}}).json()
         assert d["decision"] == "book_now" and d["traffic"]["flipped_to_book_now"]
         assert any(r.startswith("Book now — jam coming") for r in d["reasons"])
-        assert not any(r.startswith("Tunggu") for r in d["reasons"])
+        assert not any(r.startswith("Wait ") for r in d["reasons"])
         clear = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 18}}).json()
         assert clear["decision"] == "wait" and not clear["traffic"]["jam_ahead"]
     quiet = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 22.0}],

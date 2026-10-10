@@ -1,4 +1,4 @@
-"""Estimated normal ("harga biasa") Grab fare for a route — used ONLY if reports/fare_check.json passed.
+"""Estimated normal (usual) Grab fare for a route — used ONLY if reports/fare_check.json passed.
 
 fare = max(minimum, base + per_km x km + per_min x minutes) with Grab's published Klang Valley rates
 (data/fares/grab_rates.csv, Jan 2023, cited), km/minutes from OpenStreetMap routing (OSRM, free-flow

@@ -5,7 +5,7 @@ Compares api.fare.raw_fare(OSRM route) with REAL off-peak Grab prices we saw our
  - raw estimate passes if median |error| <= 15%;
  - else, if errors are steady (all quotes within ±15% of the median ratio), a correction factor =
    median(real / estimate) is allowed (fitted on our own real quotes, documented) — needs >= 4 quotes;
- - otherwise FAIL: the app keeps the typed "harga biasa".
+ - otherwise FAIL: the app keeps the typed "usual price".
 Usage: python -m ml.fare_check
 """
 import json
@@ -43,7 +43,7 @@ def main() -> None:
          "routes: OpenStreetMap (OSRM); real prices: `data/fares/offpeak_quotes.csv` (seen by us in the Grab app).", ""]
     passed, factor = False, 1.0
     if len(d) == 0:
-        L += ["**No real quotes yet → FAIL (not enough data).** The app keeps the typed harga biasa."]
+        L += ["**No real quotes yet → FAIL (not enough data).** The app keeps the typed usual price."]
     else:
         err = (d.estimate / d.real - 1).abs()
         med_ratio = float(d.ratio.median())
@@ -54,7 +54,7 @@ def main() -> None:
             passed, factor = True, med_ratio
             verdict = f"PASS with correction factor ×{med_ratio:.2f} (fitted on our own real quotes)"
         else:
-            verdict = "FAIL — errors too large or not steady; the app keeps the typed harga biasa"
+            verdict = "FAIL — errors too large or not steady; the app keeps the typed usual price"
         L += ["| Route | Seen at | km | min (free-flow) | Real RM | Estimate RM | Real ÷ estimate |", "|---|---|---|---|---|---|---|"]
         L += [f"| {r.route} | {r.seen_at} | {r.km:.1f} | {r.min:.0f} | {r.real:.2f} | {r.estimate:.2f} | {r.ratio:.2f} |"
               for r in d.itertuples()]

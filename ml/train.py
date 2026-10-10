@@ -64,7 +64,7 @@ MIN_WAIT_P = 0.20  # product rule (Ravin, 10 Oct): never advise waiting below a 
 
 
 def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
-    """"Tunggu" rule: wait for the horizon with the best odds multiple if it is >= k AND the chance of a >= 10%
+    """"Wait" rule: wait for the horizon with the best odds multiple if it is >= k AND the chance of a >= 10%
     drop there is >= MIN_WAIT_P. base = usual chance per horizon. -> (wait, horizon index)."""
     best = mult.argmax(axis=1)
     if k is None:
@@ -81,7 +81,7 @@ def base_rates(bundle: dict) -> np.ndarray:
 
 
 def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
-    """Pick k for the "Tunggu" rule on VAL days (highest mean saving vs book now, waiting at the chosen
+    """Pick k for the "Wait" rule on VAL days (highest mean saving vs book now, waiting at the chosen
     horizon); None (= never advise waiting) if no k saves money on val."""
     v = va.dropna(subset=[f"ratio_{h}" for h in HORIZONS])
     actual = v[[f"ratio_{h}" for h in HORIZONS]].to_numpy()

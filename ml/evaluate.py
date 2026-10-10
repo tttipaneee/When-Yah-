@@ -96,7 +96,7 @@ def main() -> None:
     rows["Linear on level (1/level)"] = policy_stats(*decide(lin, None), actual, clusters)
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
-    # "Tunggu" odds rule (served): wait for the horizon with the best odds multiple if >= k; k picked on val
+    # "Wait" odds rule (served): wait for the horizon with the best odds multiple if >= k; k picked on val
     odds_wait = {}
     for v in preds:
         k = b.get("wait_k", {}).get(v)
@@ -236,9 +236,9 @@ def main() -> None:
                 "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3),
                 "hour_of_day_saving": round(float(sh15["saving"]), 4),
                 "always_wait_30_saving": round(float(aw["saving"]), 4)}
-        L += [f"- **\"Tunggu\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual and chance ≥ {MIN_WAIT_P:.0%}; k picked on val): saving "
+        L += [f"- **\"Wait\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual and chance ≥ {MIN_WAIT_P:.0%}; k picked on val): saving "
               f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
-              + ("**beats book now: the app may say \"Tunggu\"**" if ok else "**does not beat book now: the app says book now**")
+              + ("**beats book now: the app may say \"Wait\"**" if ok else "**does not beat book now: the app says book now**")
               + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}; paired difference {pct(dm)}, "
               f"95% CI {pct(dlo)} … {pct(dhi)}). When it waits it saves "
               f"{pct(r_['saving_when_wait'])} on average and {r_['worse_share_of_waits']:.0%} of waits cost more. "
@@ -247,10 +247,10 @@ def main() -> None:
                  f"hour-of-day rule ({pct(sh15['saving'])}) or simply always waiting 30 min ({pct(aw['saving'])}) "
                  "get: high prices tend to fall back (mean reversion); the model adds little there."
                  if v == "with_level" else "")]
-    L += ["", "**Disclosure.** The gate for showing \"Tunggu\" was changed on 10 Oct 2026 after we saw test "
+    L += ["", "**Disclosure.** The gate for showing \"Wait\" was changed on 10 Oct 2026 after we saw test "
           "results. The original gate required beating both \"book now\" and the hour-of-day rule; the rule failed "
           "it. The new gate (beat \"book now\" only) was chosen with knowledge of the test numbers, so treat the "
-          "\"Tunggu\" result as exploratory. k is sensitive: calibrating on Aug 22–23 and choosing k on Aug 24–25 "
+          "\"Wait\" result as exploratory. k is sensitive: calibrating on Aug 22–23 and choosing k on Aug 24–25 "
           "picks k = 1.5 instead of 1.25 (test saving +0.19% instead of +0.22%)."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}

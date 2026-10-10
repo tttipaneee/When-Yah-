@@ -11,13 +11,13 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
 drop if they wait. The user types the price(s) they see (usual price optional); **When Yah?** gives the
 **calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
-per quoted app, "Tunggu X min" or book now (tested rule: beats book-now, slightly below hour-of-day), and real
+per quoted app, "Wait X min" or book now (tested rule: beats book-now, slightly below hour-of-day), and real
 events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
 
 ## The evidence rule — never break it
 Every number shown in the app, README or slides must trace to **real data** or a **cited, dated source**.
 - **Real data:** model trained and evaluated on public ride-hailing data (NYC TLC High Volume FHV trip records, Uber/Lyft, Aug 2024). Boston was rejected at go/no-go — see `reports/signal_check.md`.
-- **Real input:** prices the user types from their own apps ("Masukkan harga yang anda nampak"), optional usual price ("harga biasa").
+- **Real input:** prices the user types from their own apps ("Enter the prices you see"), optional usual price .
 - **Learned from real data, only if validated:** event effect from real NYC venue events (e.g. Madison Square Garden, Barclays Center, Yankee Stadium; Aug 2024, sourced) — shown only if `reports/event_effect.md` confirms it on held-out data.
 - **Cited sources:** real Malaysian event schedules (venue, date, time, source URL); 2× surcharge ceiling (Ministry of Transport statement, May 2022 — cite with date).
 - **Not allowed:** invented fares, multipliers, per-app RM prices, area adjustments or event uplifts. If a value can't be traced, don't show it.
@@ -74,16 +74,16 @@ Fill in as they're created; keep them working.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
   CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k **and** P(drop≥10%) there is ≥ 20%
   (product rule; below that, "book now"); `wait_minutes` = that horizon.
-  A reason starting "Tunggu" gives the tested saving and how often waiting cost more.
+  A reason starting "Wait" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
 - Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
   are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
   Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now} | null`. A departure ≥ 25% longer than now
-  = jam: "Tunggu" flips to "Book now — jam coming". Minutes only — traffic is **not** a price-model input
+  = jam: "Wait" flips to "Book now — jam coming". Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
-- `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
+- `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
