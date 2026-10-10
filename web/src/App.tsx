@@ -305,9 +305,7 @@ export default function App() {
       '<label class="qbig" for="qPrice"><span class="qq">What does <b>'+esc(name)+'</b> show?</span>'+
       '<span class="qamt"><span>RM</span><input id="qPrice" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00"'+(help?' aria-describedby="qHelp"':'')+'></span></label>'+
       (help?'<p class="qhelp" id="qHelp">'+help+'</p>':'');
-    fitAmt($("qPrice"));
   }
-  function fitAmt(i){if(i)i.style.width=Math.max(3.2,(i.value||i.placeholder).length+.6)+"ch"}  // keeps "RM 28" centred
   function selectApp(app,focus){
     ACTIVE=app;renderQuotes();
     if(focus){var i=$("qPrice");if(i)i.focus({preventScroll:true})}
@@ -318,7 +316,7 @@ export default function App() {
   }
   $("quotes").addEventListener("input",function(e){
     var t=e.target;if(t.id!=="qPrice")return;
-    fitAmt(t);var v=parseFloat(t.value);activeQuote().price=isFinite(v)&&v>0?v:0;
+    var v=parseFloat(t.value);activeQuote().price=isFinite(v)&&v>0?v:0;
     var em=document.querySelector('[data-chip="'+ACTIVE+'"]');if(em)em.textContent=chipPrice(ACTIVE);
     renderPrediction();
   });
@@ -896,11 +894,9 @@ export default function App() {
           <div className="card-head">
             <div>
               <h2 id="qt">Enter the prices you see</h2>
-              <p className="sub">Pick an app and type the fare it shows. Tap another app to compare.</p>
             </div>
           </div>
           <div id="quotes" className="qwrap"></div>
-          <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
           <button className="usual-toggle" id="usualToggle" type="button" aria-expanded="false" aria-controls="usualBox">+ Add usual price <em>(optional)</em></button>
           <label className="usual-box" htmlFor="usual" id="usualBox" hidden>
             <span className="usual-top"><b>Usual price</b><em>Optional</em></span>
@@ -914,6 +910,7 @@ export default function App() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
           </div>
+          <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
         </section>
 
         <section aria-label="Events near pickup" id="events">
