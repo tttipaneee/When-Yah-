@@ -299,12 +299,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .top-chips .chip{padding:7px 9px}
 
 /* why rows + 3-way tabs */
-.why2{display:flex;flex-direction:column;gap:12px}
-.why2 .wr{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start}
-.why2 .wi{width:32px;height:32px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--ink)}
-.why2 b{font-size:13px;display:block}
-.why2 p{margin:1px 0 0;font-size:12.5px;line-height:1.4;color:var(--ink);opacity:.8}
-.why2 small{font-size:11px;color:var(--mute)}
 .lb-toggle.three{grid-template-columns:1fr 1fr 1fr;margin-bottom:6px}
 .lb-toggle.three button{font-size:12px}
 
@@ -471,6 +465,5 @@ button.opt:active{transform:scale(.98)}
 .why-more summary::-webkit-details-marker{display:none}
 .why-more summary::after{content:" ›"}
 .why-more[open] summary::after{content:" ⌄"}
-.why-more .why2{margin-top:8px}
 .fare2{display:flex;flex-direction:column;gap:14px}
 .fare2 .qamt input{font-size:40px}

@@ -392,30 +392,9 @@ export default function App() {
     $("wt").textContent=wait?"Why wait":"Why book now";
   }
   function realOnly(){
-    if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';$("whyLines").innerHTML="";return}
-    // reasons → short icon rows; the odds and "Wait" reasons are already on the decision card
+    if(!MODEL){$("whyLines").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
     var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',car:'<path d="M5 16v-5l1.7-4.5A2 2 0 0 1 8.6 5h6.8a2 2 0 0 1 1.9 1.5L19 11v5M5 16h14M5 16v2.5M19 16v2.5"/>',
-      rain:'<path d="M7 15a4 4 0 1 1 1.2-7.8A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/>',
-      tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
-      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'};
-    function row(icon,title,text,extra){text=text.charAt(0).toUpperCase()+text.slice(1);return '<div class="wr"><span class="wi">'+ic(I[icon])+'</span><div><b>'+esc(title)+'</b><p>'+esc(text)+'</p>'+(extra||"")+'</div></div>'}
-    var html=MODEL.reasons.map(function(t){
-      if(/^Chance that waiting|^Wait \d+ min:|^Event (right here|in the area|today|nearby)/.test(t))return "";
-      if(/^Book now — jam coming|^Traffic/.test(t))return row("car","Traffic",t.replace(/^Traffic: /,""));
-      if(/^Book now/.test(t))return row("clock","Why book now",t.replace(/^Book now: /,""));
-      if(/^Odds of a drop/.test(t))return row("clock","Why book now",t);
-      if(/^Your quote is/.test(t))return row("tag","Your price",t);
-      if(/^Why so pricey\?/.test(t))return row("tag","Why so pricey?",t.replace(/^Why so pricey\? /,""));
-      if(/^No usual price/.test(t))return row("tag","No usual price",t.replace(/^No usual price given: /,"Without it, "));
-      if(t==="rain"||t==="no rain")return "";  // no rain input in the app any more
-      if(/^Event ending right here: /.test(t))return row("cal","Event ending",t.replace(/^Event ending right here: /,""));
-      return row("info","Note",t);
-    }).join("");
-    html+=MODEL.events.map(function(e){
-      var lv=e.level==="right_here"?"Event right here":e.level==="in_area"?"Event in the area":"Event today";
-      return row("cal",lv+(e.km!=null?" · "+e.km.toFixed(1)+" km":""),e.name,'<small><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</small>')}).join("");
-    html+='<div class="why-src">Model '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
-    $("why").innerHTML=html;
+      tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'};
     renderWhyLines(I);
     renderFareReport();
   }
@@ -762,9 +741,9 @@ export default function App() {
   // Runs by itself when the forecast screen shows a result; one call per forecast input (cached), shortly
   // after typing stops. If AI is unavailable or rejected, the Details rows open instead.
   var AI_KEY="",AI_CACHE={},AI_T=null;
-  function aiShow(r){  // AI text sits under "Read the full explanation"; without it, the detail rows there are enough
-    if(r&&r.ai&&r.text)$("aiOut").innerHTML='<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>';
-    else $("aiOut").innerHTML='';
+  function aiShow(r){  // AI text sits under "Read the full explanation"; no AI text, no link (the three lines stand alone)
+    var ok=!!(r&&r.ai&&r.text);$("whyMore").hidden=!ok;
+    $("aiOut").innerHTML=ok?'<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>':'';
   }
   function aiReset(){
     if(!MODEL||!$("res").classList.contains("on"))return;
@@ -772,7 +751,7 @@ export default function App() {
     if(k===AI_KEY)return;
     AI_KEY=k;clearTimeout(AI_T);
     if(AI_CACHE[k]){aiShow(AI_CACHE[k]);return}
-    $("aiOut").innerHTML='<p class="ai-text ai-wait">Explaining this forecast…</p>';
+    $("whyMore").hidden=true;$("aiOut").innerHTML="";
     AI_T=setTimeout(function(){
       explainForecast({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
         .then(function(r){if(r.ai)AI_CACHE[k]=r;if(k===AI_KEY)aiShow(r)});
@@ -1018,7 +997,7 @@ export default function App() {
         <section className="card why-card" aria-labelledby="wt">
           <h2 id="wt">Why</h2>
           <div className="wlines" id="whyLines"></div>
-          <details className="why-more"><summary>Read the full explanation</summary><div id="aiOut" aria-live="polite"></div><div className="why2" id="why"></div></details>
+          <details className="why-more" id="whyMore" hidden><summary>Read the full explanation</summary><div id="aiOut" aria-live="polite"></div></details>
         </section>
 
         <section className="card" aria-labelledby="ft">
