@@ -11,13 +11,13 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
 drop if they wait. The user types the price(s) they see (usual price optional); **When Yah?** gives the
 **calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
-per quoted app, "Tunggu X min" or book now (tested rule: beats book-now, slightly below hour-of-day), and real
+per quoted app, "Wait X min" or book now (tested rule: beats book-now, slightly below hour-of-day), and real
 events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
 
 ## The evidence rule — never break it
 Every number shown in the app, README or slides must trace to **real data** or a **cited, dated source**.
 - **Real data:** model trained and evaluated on public ride-hailing data (NYC TLC High Volume FHV trip records, Uber/Lyft, Aug 2024). Boston was rejected at go/no-go — see `reports/signal_check.md`.
-- **Real input:** prices the user types from their own apps ("Masukkan harga yang anda nampak"), optional usual price ("harga biasa").
+- **Real input:** prices the user types from their own apps ("Enter the prices you see"), optional usual price .
 - **Learned from real data, only if validated:** event effect from real NYC venue events (e.g. Madison Square Garden, Barclays Center, Yankee Stadium; Aug 2024, sourced) — shown only if `reports/event_effect.md` confirms it on held-out data.
 - **Cited sources:** real Malaysian event schedules (venue, date, time, source URL); 2× surcharge ceiling (Ministry of Transport statement, May 2022 — cite with date).
 - **Not allowed:** invented fares, multipliers, per-app RM prices, area adjustments or event uplifts. If a value can't be traced, don't show it.
@@ -48,6 +48,7 @@ Fill in as they're created; keep them working.
 - Borough experiment: `python -m ml.experiment_borough` (→ `reports/borough_experiment.md`; zone→borough from `data/zones/taxi_zones_borough.csv`, NYC Open Data taxi zones export 2025-10-03)
 - Traffic: `python -m ml.traffic && python -m ml.experiment_traffic` (→ `reports/traffic_experiment.md`)
 - Extreme-price calibration: `python -m ml.experiment_extreme` (→ `reports/extreme_experiment.md`)
+- Case studies (event exit + surge fall-back, charts): `python -m ml.case_studies` (→ `reports/case_studies.md`, `reports/case_*.png`; needs matplotlib, dev only)
 - Fare check (needs real off-peak quotes in `data/fares/offpeak_quotes.csv`): `python -m ml.fare_check` (→ `reports/fare_check.md`, gate for `usual_price_estimate`)
 - API tests: `python -m pytest -q tests`
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:3000, API http://localhost:8000/docs
@@ -73,23 +74,30 @@ Fill in as they're created; keep them working.
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
   CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k **and** P(drop≥10%) there is ≥ 20%
-  (product rule; below that, "book now"); `wait_minutes` = that horizon.
-  A reason starting "Tunggu" gives the tested saving and how often waiting cost more.
+  (product rule; below that, "book now") **and** the expected `pct_change` there is < 0 (product rule, 10 Oct: never
+  "Wait" next to a rising line); `wait_minutes` = that horizon.
+  A reason starting "Wait" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
 - Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
   are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
-  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now} | null`. A departure ≥ 25% longer than now
-  = jam: "Tunggu" flips to "Book now — jam coming". Minutes only — traffic is **not** a price-model input
+  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now, km} | null` (`km` = TomTom route length for
+  leaving now; the map labels the route with `minutes["0"]` + `km`, else the OSRM no-traffic route). A departure ≥ 25% longer than now
+  = jam: "Wait" flips to "Book now — jam coming". If a Grab quote's trip gets ≥ 10% (and 3 min) longer later, the reason adds
+  that Grab's fare includes a per-minute charge (Grab fare structure, Jan 2023), in words only. Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
-- `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
+- `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as
+  `reports/case_studies.md`, checked by a test). Shown in the "What we saw in real ride data" card (no city named there).
+- `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
   Forecast events carry `km` and `level`: `right_here` (≤ 1 km ≈ the venue's own NYC taxi zone, where post-game effects
   were measured) or `in_area` (≤ 5 km, product choice, information only). The map draws a dashed 1 km circle per venue.
+  Exit hint: for a `right_here` event with a published `end`, from 30 min before to 45 min after it, a reason starting
+  "Event ending right here" says in words (no %) that prices next to a venue went up after big events ended.
 - `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
   calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).

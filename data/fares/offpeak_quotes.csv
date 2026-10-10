@@ -5,3 +5,7 @@ seen_at,from_name,from_lat,from_lon,to_name,to_lat,to_lon,app,price_rm,note
 2026-10-10T15:47+08:00,Taylor's University Lakeside,3.0632813,101.6170616,LRT SS15,3.0756824,101.5861786,grab,12.00,seen by Ravin
 2026-10-10T15:48+08:00,KLIA Terminal 1,2.7527291,101.7055234,LRT SS15,3.0756824,101.5861786,grab,73.00,seen by Ravin; airport trip (tolls/airport fee not in the rate formula)
 2026-10-10T15:49+08:00,LRT Glenmarie,3.0959075,101.5903895,Bangsar Trade Centre,3.1154617,101.6682240,grab,15.00,seen by Ravin; Grab showed 'low demand'
+2026-10-10T18:31+08:00,Unifi Arena,3.0537311,101.6934618,KL Sentral,3.1325847,101.6879963,grab,16.00,seen by Ravin (Sat evening; MAMAMOO concert at Unifi Arena started 16:00); no demand banner (confirmed by Ravin)
+2026-10-10T18:32+08:00,Unifi Arena,3.0537311,101.6934618,Sunway Geo Avenue,3.0647651,101.6088508,grab,13.00,seen by Ravin (Sat evening; MAMAMOO concert at Unifi Arena started 16:00); no demand banner (confirmed by Ravin)
+2026-10-10T18:32+08:00,Pavilion KL,3.1491540,101.7129531,Sunway Geo Avenue,3.0647651,101.6088508,grab,25.00,seen by Ravin; time not noted (sent with the 18:31-18:33 quotes); no demand banner (confirmed by Ravin)
+2026-10-10T18:33+08:00,D'Latour (The Suitel; OSM way 410505893),3.0590935,101.6153090,LRT SS15,3.0756824,101.5861786,grab,17.00,seen by Ravin; LRT SS15 (confirmed by Ravin); no demand banner (confirmed by Ravin)

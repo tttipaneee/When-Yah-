@@ -48,7 +48,18 @@ def clf_for(name: str, feats: list[str]) -> lgb.LGBMClassifier:
 def drop_prob(m: dict, X) -> np.ndarray:
     """Calibrated P(drop >= 10%) — use this everywhere (evaluate, API), never m["clf"] directly."""
     p = m["clf"].predict_proba(X)[:, 1]
-    return m["cal"].predict(p) if "cal" in m else p
+    if "cal" not in m:
+        return p
+    q = m["cal"].predict(p)
+    # Audit fix (10 Oct, post hoc): an isotonic top step that jumps > 0.2 above the step below rests on a handful
+    # of val windows (with_level +15 jumped 0.346 -> 1.0 and the app showed "100% chance"); cap at the step below
+    y = np.unique(m["cal"].y_thresholds_)
+    if len(y) > 1 and y[-1] - y[-2] > TOP_STEP_JUMP:
+        q = np.minimum(q, y[-2])
+    return q
+
+
+TOP_STEP_JUMP = 0.2
 
 
 K_GRID = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)
@@ -63,9 +74,12 @@ def odds_multiples(bundle: dict, name: str, X) -> np.ndarray:
 MIN_WAIT_P = 0.20  # product rule (Ravin, 10 Oct): never advise waiting below a 20% chance of a >= 10% drop
 
 
-def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
-    """"Tunggu" rule: wait for the horizon with the best odds multiple if it is >= k AND the chance of a >= 10%
-    drop there is >= MIN_WAIT_P. base = usual chance per horizon. -> (wait, horizon index)."""
+def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None,
+           mean: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """"Wait" rule: wait for the horizon with the best odds multiple if it is >= k AND the chance of a >= 10%
+    drop there is >= MIN_WAIT_P AND the expected price there is below the price now (product rule, 10 Oct:
+    never say "Wait" while the expected line is rising). base = usual chance per horizon; mean = (n, 4)
+    predicted ratios. -> (wait, horizon index)."""
     best = mult.argmax(axis=1)
     if k is None:
         return np.zeros(len(mult), bool), best
@@ -73,7 +87,15 @@ def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None) ->
     wait = m >= k
     if base is not None:
         wait &= m * np.asarray(base)[best] >= MIN_WAIT_P
+    if mean is not None:
+        wait &= np.asarray(mean)[np.arange(len(mult)), best] < 1
     return wait, best
+
+
+def mean_ratios(bundle: dict, name: str, X) -> np.ndarray:
+    """(n, 4): predicted mean ratio (price at +h / price now) at +15/30/45/60."""
+    ms = bundle["models"][name]
+    return np.c_[[ms[h]["mean"].predict(X) for h in HORIZONS]].T
 
 
 def base_rates(bundle: dict) -> np.ndarray:
@@ -81,14 +103,15 @@ def base_rates(bundle: dict) -> np.ndarray:
 
 
 def choose_wait_k(bundle: dict, name: str, va: pd.DataFrame) -> float | None:
-    """Pick k for the "Tunggu" rule on VAL days (highest mean saving vs book now, waiting at the chosen
+    """Pick k for the "Wait" rule on VAL days (highest mean saving vs book now, waiting at the chosen
     horizon); None (= never advise waiting) if no k saves money on val."""
     v = va.dropna(subset=[f"ratio_{h}" for h in HORIZONS])
     actual = v[[f"ratio_{h}" for h in HORIZONS]].to_numpy()
     mult = odds_multiples(bundle, name, v[bundle["features"][name]])
+    mean = mean_ratios(bundle, name, v[bundle["features"][name]])
     best, best_saving = None, 0.0
     for k in K_GRID:
-        wait, h = tunggu(mult, k, base_rates(bundle))
+        wait, h = tunggu(mult, k, base_rates(bundle), mean)
         saving = float(np.where(wait, 1 - actual[np.arange(len(v)), h], 0.0).mean())
         print(f"  {name} k={k}: val waits {wait.mean():.2%}, mean saving {saving:+.3%}")
         if saving > best_saving:

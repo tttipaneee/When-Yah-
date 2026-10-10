@@ -1,0 +1,21 @@
+{
+ "source": "reports/case_studies.md",
+ "note": "transcribed by hand from reports/case_studies.md on 2026-10-10 (raw data not on this laptop); python -m ml.case_studies regenerates it",
+ "event_exit": {
+  "train_games": 11,
+  "heldout_games": 6,
+  "peak": 0.23,
+  "peak_window_min": [0, 15],
+  "learned_bins": {"-30": 0.18, "-15": 0.2, "0": 0.23, "15": 0.19, "30": 0.15, "45": 0.13, "60": 0.14, "75": 0.12, "90": 0.08},
+  "heldout_0_45": 0.22,
+  "learned_0_45": 0.19,
+  "error_learned": 0.056,
+  "error_no_effect": 0.145
+ },
+ "surge_fallback": [
+  {"band": "normal (< 1.2×)", "n": 69211, "actual": {"30": 0.004, "60": 0.003}, "model": {"30": 0.005, "60": 0.005}, "drop10_actual_30": 0.11, "drop10_model_30": 0.11},
+  {"band": "1.2–1.5×", "n": 8163, "actual": {"30": -0.002, "60": -0.005}, "model": {"30": -0.001, "60": -0.004}, "drop10_actual_30": 0.16, "drop10_model_30": 0.16},
+  {"band": "≥ 1.5×", "n": 255, "actual": {"30": -0.041, "60": -0.066}, "model": {"30": -0.041, "60": -0.073}, "drop10_actual_30": 0.33, "drop10_model_30": 0.31},
+  {"band": "≥ 1.8×", "n": 23, "actual": {"30": -0.097, "60": -0.152}, "model": {"30": -0.077, "60": -0.134}, "drop10_actual_30": 0.52, "drop10_model_30": 0.41}
+ ]
+}

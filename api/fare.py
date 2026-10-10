@@ -1,8 +1,8 @@
-"""Estimated normal ("harga biasa") Grab fare for a route — used ONLY if reports/fare_check.json passed.
+"""Estimated normal (usual) Grab fare for a route — used ONLY if reports/fare_check.json passed.
 
 fare = max(minimum, base + per_km x km + per_min x minutes) with Grab's published Klang Valley rates
-(data/fares/grab_rates.csv, Jan 2023, cited), km/minutes from OpenStreetMap routing (OSRM, free-flow
-time). If the fare check fitted a correction factor on Ravin's own off-peak quotes, it is applied.
+(data/fares/grab_rates.csv, Jan 2023, cited). km/minutes from TomTom (traffic-aware, needs TOMTOM_API_KEY)
+or OpenStreetMap routing (OSRM, free-flow time) — whichever method reports/fare_check.json validated. If the fare check fitted a correction factor on Ravin's own off-peak quotes, it is applied.
 """
 import csv
 import json
@@ -52,16 +52,23 @@ def check() -> dict:
     return json.loads(CHECK.read_text(encoding="utf-8")) if CHECK.exists() else {"passed": False}
 
 
-def estimate(a: tuple[float, float], b: tuple[float, float]) -> dict | None:
-    """{'rm', 'km', 'min', 'source'} if the fare check passed and a route is available, else None."""
+def estimate(a: tuple[float, float], b: tuple[float, float], when=None) -> dict | None:
+    """{'rm', 'km', 'min', 'source'} if the fare check passed for an available method, else None."""
+    from api.traffic import route_with_traffic  # local import: avoids a cycle at module load
     c = check()
     if not c.get("passed"):
         return None
-    rt = route(a, b)
+    method = c.get("method", "osrm")
+    if method == "tomtom":
+        rt = route_with_traffic(a, b, None)
+        label = "TomTom traffic-aware route"
+    else:
+        rt = route(a, b)
+        label = "OpenStreetMap route"
     if rt is None:
         return None
     km, mins = rt
     factor = float(c.get("factor", 1.0))
-    src = (f"Grab published rates ({rates()['effective']}, {rates()['source_url']}) + OpenStreetMap route"
+    src = (f"Grab published rates ({rates()['effective']}) + {label}"
            + (f", x{factor:.2f} fitted on our own off-peak quotes (reports/fare_check.md)" if factor != 1.0 else ""))
     return {"rm": round(raw_fare(km, mins) * factor, 2), "km": round(km, 1), "min": round(mins), "source": src}

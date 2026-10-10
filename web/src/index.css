@@ -298,3 +298,10 @@ button.opt:hover{border-color:var(--ink)}
 
 .fs-top, .fs-bottom, .fs-chip, .zs, .res { z-index: 500 !important; }
 .leaflet-container { z-index: 1; font-family: inherit; }
+
+/* study cases card */
+.study{margin:10px 0 14px}
+.study h3{font-size:14px;margin:0 0 6px}
+.study .chart{width:100%;height:auto}
+.study .sub{margin-top:6px}
+

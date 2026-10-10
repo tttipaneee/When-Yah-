@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchCaseStudies, fetchEventsToday, kmBetween, klTime } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -32,60 +32,9 @@ export default function App() {
   var REAL_EVENTS=[],EVENTS_LOADED=false;  // real events today from /api/events (each with source_url)
   var NEAR_KM=5;   // "event in the area": product choice, information only
   var HERE_KM=1;   // "event right here": ~ the venue's own taxi zone where NYC data measured post-event effects
-  var EVENT={
-    at:"Axiata Arena",r:46,
-    name:"Example concert",
-    venue:"Axiata Arena, Bukit Jalil",
-    start:"14:00",
-    ends:"16:30",
-    crowd:"about 15,000",
-    surge:"+15 to +25%",
-    easeMin:45,
-    nearbyPts:4,
-    source:"Event page (example)",
-    reasons:[
-      {title:"Event crowd booking rides at the same moment",text:"Thousands of riders request cars within minutes of each other, so demand jumps well above the number of nearby drivers.",dir:"up",pts:8,source:"Event page (example)"},
-      {title:"Fewer drivers willing to enter jammed roads around the venue",text:"Traffic makes pickups slow, so drivers avoid the area unless the fare is higher.",dir:"up",pts:5,source:"Model: distance to event"},
-      {title:"Exit wave expected around the end time",text:"Much of the crowd leaves within minutes of the finish, so requests spike in a short window.",dir:"up",pts:7,source:"Model: minutes to event end"},
-      {title:"Drivers repositioning toward the venue after it ends",text:"Later, more drivers head to the area, which pulls prices back down.",dir:"down",pts:5,source:"Model: minutes since event end"}
-    ]
-  };
-  // Example data. Production will use Prasarana GTFS static + realtime feeds from data.gov.my
-  var TRANSIT={
-    STATIONS:[
-      {n:"Bukit Jalil",line:"LRT Sri Petaling line",x:238,y:148,lx:-9,ly:-7,a:"end"},
-      {n:"Sungai Besi",line:"LRT Sri Petaling line",x:218,y:124,lx:9,ly:3,a:"start"},
-      {n:"Bandar Tasik Selatan",line:"LRT Sri Petaling line, KTM Komuter, KLIA Transit",x:180,y:104,lx:9,ly:-8,a:"start"},
-      {n:"KL Sentral",line:"Rail hub",x:70,y:84,lx:9,ly:-9,a:"start"}
-    ],
-    COMBOS:{
-      "Axiata Arena":{
-        walkTo:"Bukit Jalil",walkMin:5,
-        board:"Bukit Jalil",alight:"Bandar Tasik Selatan",stops:2,
-        trainMin:6,waitMin:5,
-        trainFare:1.60,
-        rideRatio:0.5,
-        rideMin:18,
-        rideNowMin:35,
-        crowdNote:"Bukit Jalil station gets crowded right after events; leave before the exit wave or expect a longer wait."
-      }
-    },
-    RAIL_HUBS:["KL Sentral","KLCC","Mid Valley City"],
-    HUB_TRIPS:{
-      "Axiata Arena":{
-        "KL Sentral":{via:"LRT to Bandar Tasik Selatan, then KTM Komuter or KLIA Transit",fare:3.60,min:38},
-        "KLCC":{via:"LRT to Masjid Jamek, then the Kelana Jaya line",fare:3.50,min:52},
-        "Mid Valley City":{via:"LRT to Bandar Tasik Selatan, then KTM Komuter",fare:3.80,min:46}
-      },
-      "Bandar Tasik Selatan":{
-        "KL Sentral":{via:"KTM Komuter or KLIA Transit",fare:2.60,min:22},
-        "KLCC":{via:"LRT to Masjid Jamek, then the Kelana Jaya line",fare:3.00,min:36},
-        "Mid Valley City":{via:"KTM Komuter",fare:2.80,min:28}
-      }
-    }
-  };
+  // Example event zone for the design prototype (hidden screens); no numbers — real events come from /api/events
+  var EVENT={at:"Axiata Arena",r:46,name:"",source:""};
   var fsOpener=null,resOpener=null,zoneOpener=null,zoneBox=null;
-  var WALK={n:"Sri Petaling",pct:-8,min:15};
   var state={from:"Axiata Arena",to:"KL Sentral",active:"from",prevFrom:null,
     quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null,toLatLon:null};
 
@@ -169,7 +118,6 @@ export default function App() {
   function railLine(sts,w){
     return '<polyline points="'+sts.map(function(p){return p.x+","+p.y}).join(" ")+'" fill="none" stroke="#101410" stroke-width="'+w+'" stroke-dasharray="5 4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" pointer-events="none"/>';
   }
-  function stn(n){for(var i=0;i<TRANSIT.STATIONS.length;i++)if(TRANSIT.STATIONS[i].n===n)return TRANSIT.STATIONS[i];return null}
   function fitBox(pts,pad,asp){
     var xs=pts.map(function(p){return p.x}),ys=pts.map(function(p){return p.y});
     var x0=Math.min.apply(0,xs),x1=Math.max.apply(0,xs),y0=Math.min.apply(0,ys),y1=Math.max.apply(0,ys);
@@ -216,13 +164,35 @@ export default function App() {
       L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
     }
     if(v) {
-      L.circle([v.lat, v.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.15, weight: 1, dashArray: "4 4"}).addTo(miniLayers);
+      L.circle([v.lat, v.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.28, weight: 2, className: "zone-o"}).addTo(miniLayers);
       L.circleMarker([v.lat, v.lon], {radius: 6, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(miniLayers);
+    }
+  }
+  // Route time + distance: TomTom traffic-aware "leave now" (via /api/forecast) when the API has it,
+  // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
+  var OSRM_ROUTE = null, routeLine = null, MODEL_ROUTE = "";
+  function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
+  function routeText(){
+    var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
+    if(t && t.minutes && t.minutes["0"] != null && t.km != null)
+      return {html: "<b>" + Math.round(t.minutes["0"]) + " min</b> now with traffic · " + t.km.toFixed(1) + " km",
+              src: "TomTom traffic prediction"};
+    if(OSRM_ROUTE) return {html: "<b>" + OSRM_ROUTE.min + " min</b> without traffic · " + OSRM_ROUTE.km.toFixed(1) + " km",
+                           src: "OpenStreetMap route"};
+    return null;
+  }
+  function showRouteStats(){
+    var r = routeText(), rs = document.getElementById("routeStats");
+    if(rs) rs.innerHTML = r ? '<span>' + r.html + ' <span style="opacity:.6">· ' + esc(r.src) + '</span></span>' : "";
+    if(routeLine){
+      routeLine.unbindTooltip();
+      if(r) routeLine.bindTooltip(r.html, {permanent: true, direction: "center", className: "map-label"}).openTooltip();
     }
   }
   function drawBig(){
     if(!bigLayers) return;
     bigLayers.clearLayers();
+    OSRM_ROUTE = null; routeLine = null; showRouteStats();
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
     if(a && b && state.from !== state.to) {
@@ -235,15 +205,14 @@ export default function App() {
               var coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
               L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
-              var distKm = (data.routes[0].distance / 1000).toFixed(1);
-              var durMin = Math.round(data.routes[0].duration / 60);
-              var rs = document.getElementById("routeStats");
-              if (rs) rs.innerHTML = "<b>" + durMin + " min</b> driving (" + distKm + " km)";
+              OSRM_ROUTE = {min: Math.round(data.routes[0].duration / 60), km: data.routes[0].distance / 1000};
+              routeLine = L.polyline(coords, {opacity: 0}).addTo(bigLayers);  // anchor for the route label
+              showRouteStats();
            }
         }).catch(e => console.error(e));
     }
     REAL_EVENTS.forEach(function(e){  // real venues today (source-linked in the event sheet)
-      var ring = L.circle([e.lat, e.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.12, weight: 1.5, dashArray: "6 6"}).addTo(bigLayers);
+      var ring = L.circle([e.lat, e.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.28, weight: 2.5, className: "zone-o"}).addTo(bigLayers);
       ring.on("click", function(){ openZone($("zoneChip")); });
       var mk = L.circleMarker([e.lat, e.lon], {radius: 9, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(bigLayers);
       mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
@@ -262,7 +231,13 @@ export default function App() {
           drawBig(); syncFields(true); renderPrediction();
        });
     });
-    if(a) bigMapL.setView([a.lat, a.lon], 12);
+    var ne = nearEvents()[0];
+    if(a && ne) {  // keep the whole 1 km radar circle in view, with pickup and destination
+      var vb = L.latLngBounds([[a.lat, a.lon]]).extend(L.latLng(ne.lat, ne.lon).toBounds(HERE_KM*2000));
+      if(b) vb.extend([b.lat, b.lon]);
+      // keep clear of the search card + chip (top) and the place list sheet (bottom)
+      bigMapL.fitBounds(vb, {paddingTopLeft: [30, 170], paddingBottomRight: [30, 290], maxZoom: 15});
+    } else if(a) bigMapL.setView([a.lat, a.lon], 12);
   }
 
   /* ---------- fields ---------- */
@@ -418,13 +393,17 @@ export default function App() {
     return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",hour12:false});
   }
   function renderChart(){
-    var W=320,H=150,L=34,R=14,T=16,B=26,ymax=6,ymin=-26;
+    var W=320,H=150,L=34,R=14,T=16,B=26;
+    // scale fits the forecast and its range in both directions (prices can be predicted to rise or fall)
+    var ks0=[0,15,30,45,60],hiV=Math.max.apply(0,ks0.map(function(k){return HI[k]})),loV=Math.min.apply(0,ks0.map(function(k){return LO[k]}));
+    var ymax=Math.max(6,Math.ceil((hiV+2)/5)*5),ymin=Math.min(-12,Math.floor((loV-2)/5)*5);
     var xs={0:L,15:L+(W-L-R)*0.25,30:L+(W-L-R)*0.5,45:L+(W-L-R)*0.75,60:W-R};
     function y(v){return T+(ymax-v)/(ymax-ymin)*(H-T-B)}
     var ks=[0,15,30,45,60],o="";
-    [0,-10,-20].forEach(function(g){
+    var grid=[];for(var g0=Math.ceil(ymin/10)*10;g0<=ymax;g0+=10)grid.push(g0);
+    grid.forEach(function(g){
       o+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(g)+'" y2="'+y(g)+'" stroke="'+(g===0?'#5B6755':'#D6E7BD')+'" stroke-width="1" '+(g===0?'stroke-dasharray="3 3"':'')+'/>'+
-           '<text x="'+(L-6)+'" y="'+(y(g)+3.5)+'" text-anchor="end">'+(g===0?'0%':g+'%')+'</text>';
+           '<text x="'+(L-6)+'" y="'+(y(g)+3.5)+'" text-anchor="end">'+(g===0?'0%':(g>0?'+':'')+g+'%')+'</text>';
     });
     var up=ks.map(function(k){return xs[k]+","+y(HI[k])}).join(" ");
     var dn=ks.slice().reverse().map(function(k){return xs[k]+","+y(LO[k])}).join(" ");
@@ -433,7 +412,7 @@ export default function App() {
     ks.forEach(function(k){
       var best=k===bestMin;
       o+='<circle cx="'+xs[k]+'" cy="'+y(PCT[k])+'" r="'+(best?7:4)+'" fill="'+(best?'#C4F135':'#101410')+'" stroke="#101410" stroke-width="'+(best?3:0)+'"/>';
-      if(k>0)o+='<text class="val" x="'+xs[k]+'" y="'+(y(PCT[k])+(best?22:17))+'" text-anchor="middle">'+PCT[k]+'%</text>';
+      if(k>0)o+='<text class="val" x="'+xs[k]+'" y="'+(y(PCT[k])+(best?22:17))+'" text-anchor="middle">'+(PCT[k]>0?'+':'')+PCT[k]+'%</text>';
       o+='<text x="'+xs[k]+'" y="'+(H-6)+'" text-anchor="middle">'+(k===0?"Now":"+"+k+"m")+'</text>';
     });
     $("chart").innerHTML=o;
@@ -441,15 +420,16 @@ export default function App() {
   /* ---------- real model (./model.ts → /api/forecast) ---------- */
   function applyModel(r){
     r.horizon.forEach(function(h){PCT[h.minutes]=Math.round(h.pct_change*100);LO[h.minutes]=Math.round(h.pct_low*100);HI[h.minutes]=Math.round(h.pct_high*100)});
-    // ring = chance at the advised wait (Tunggu X min), else the 30-min headline chance
+    // ring = chance at the advised wait (Wait X min), else the 30-min headline chance
     var hw=r.decision==="wait"?r.horizon.filter(function(h){return h.minutes===r.wait_minutes})[0]:null;
     PDROP=hw?hw.p_drop10:r.wait_odds.p_save10;
     var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="drop ≥10%<br>in "+(hw?r.wait_minutes:30)+" min";
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
+    var rk = routeKey();
     runModel({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
-      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}})
+      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats()})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
   function realOnly(){
@@ -470,10 +450,10 @@ export default function App() {
     renderRadar();  // pickup may have changed
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
-    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Tunggu "+bestMin+" min":"Tempah sekarang";
-    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Tunggu")===0})[0]:null;
+    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Predicting…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
+    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
     $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
-      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Tunggu \d+ min: /,""))+".":
+      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Wait \d+ min: /,""))+".":
       "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
     $("bestAt").textContent=hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";
@@ -505,120 +485,15 @@ export default function App() {
     return '<span><svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true" style="margin-right:5px"><path d="M2 5h16" stroke="#C4F135" stroke-width="8" stroke-linecap="round"/><path d="M2 5h16" stroke="#101410" stroke-width="3" stroke-linecap="round"/></svg>Ride</span>';
   }
 
-  function doWalk(){
-    state.prevFrom=state.from;state.from=WALK.n;
-    syncFields(true);setResRoute();renderPrediction();syncFsFields();toast("Pickup moved outside the zone");
-  }
-  function doTransit(){
-    var c=TRANSIT.COMBOS[state.from];if(!c)return;
-    state.prevFrom=state.from;state.from=c.alight;
-    syncFields(true);setResRoute();renderPrediction();syncFsFields();toast("Pickup moved to "+c.alight);
-  }
-  function doUndo(){
-    state.from=state.prevFrom;state.prevFrom=null;
-    syncFields(true);setResRoute();renderPrediction();syncFsFields();toast("Pickup restored");
-  }
-
-  function renderWalk(){
-    var z=inZone(),low=lowest(),a=place(state.from),v=place(EVENT.at),w=place(WALK.n);
-    var fb=fitBox([a,w,v],50,340/190),k=fb.w/300;
-    var map='<svg class="wmap" viewBox="'+fb.vb+'" preserveAspectRatio="xMidYMid slice" role="group" aria-label="Map with the event surge zone and the walking route out of it">'+
-      baseMap()+zoneMarkup(true,k,{hit:true})+
-      (z?'<path d="M'+a.x+' '+a.y+' L'+w.x+' '+w.y+'" fill="none" stroke="#101410" stroke-width="3" stroke-dasharray="0.1 6" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"/>'+pinMarkup(w,"walk",w.n,k):'')+
-      pinMarkup(a,"from",a.n,k)+'</svg>';
-    var legend='<div class="maplegend">'+legendSw("zone")+'<span><i style="background:#C4F135;border:2px solid #101410"></i>Pickup</span>'+(z?'<span><i style="background:#fff;border:2px solid #101410"></i>Walk-out point</span>':'')+'</div>';
-    var head='<div class="card-head"><div><div class="k2">2nd best option</div><h2>Walk out of the zone</h2></div><span class="tag">Example</span></div>';
-    var body;
-    if(z){
-      var after=low*(1+WALK.pct/100);
-      body='<div class="wrow"><span class="wic">'+ICON_WALK+'</span><div><b>Walk to '+esc(WALK.n)+'</b><small>About '+WALK.min+' min on foot, just outside the zone</small></div><span class="wpct">'+WALK.pct+'%</span></div>'+
-        '<p class="sub">Your pickup is inside the surge zone of '+esc(EVENT.name)+' at '+esc(EVENT.at)+'. Prices are lower outside it, so walk first, then book.'+(low?' Your lowest quote of '+rm(low)+' could be about '+rm(after)+'.':'')+'</p>'+
-        '<button class="go" id="walkGo" type="button">Set pickup to '+esc(WALK.n)+'</button>';
-    }else{
-      body='<div class="wrow ok"><span class="wic">'+ICON_CHECK+'</span><div><b>Your pickup is outside the surge zone</b><small>No need to walk</small></div><span></span></div>'+
-        (state.prevFrom?'<button class="ghost" id="walkUndo" type="button" style="width:100%;justify-content:center">Back to '+esc(state.prevFrom)+'</button>':'');
-    }
-    $("walkCard").innerHTML=head+map+legend+body;
-  }
+  function renderWalk(){$("walkCard").innerHTML=""}  // walk-out card: no sourced data yet (hidden)
 
   /* ---------- ride + train ---------- */
-  var transitInfo={full:false};
-  function step(icon,title,sub,time){
-    return '<div class="wrow"><span class="wic">'+icon+'</span><div><b>'+esc(title)+'</b><small>'+esc(sub)+'</small></div><span class="wtime">'+esc(time)+'</span></div>';
-  }
-  function transitRows(low,combo,hubTrip){
-    var rows=[];
-    if(combo){
-      rows.push({k:"ride",name:"Ride from here now",ic:ICON_CAR,total:low,min:combo.rideNowMin});
-      rows.push({k:"walk",name:"Walk out, then ride",ic:ICON_WALK,total:low*(1+WALK.pct/100),min:WALK.min+combo.rideNowMin});
-      rows.push({k:"train",name:"Train + ride",ic:ICON_TRAIN,total:combo.trainFare+low*combo.rideRatio,min:combo.walkMin+combo.waitMin+combo.trainMin+combo.rideMin});
-    }
-    if(hubTrip)rows.push({k:"all",name:"Train all the way",ic:ICON_TRAIN,total:hubTrip.fare,min:hubTrip.min,note:hubTrip.via});
-    return rows;
-  }
-  function cmpHtml(rows,low,noBest){
-    var best=-1,bv=1e9;
-    rows.forEach(function(r,i){if(r.total<bv){bv=r.total;best=i}});
-    return '<div class="rank">'+rows.map(function(r,i){
-      var diff=low-r.total,saving=diff>0.004&&r.k!=="ride";
-      var tag=r.k==="ride"?"Baseline":diff>0.004?"Save "+rm(diff):diff<-0.004?rm(-diff)+" more":"Same price";
-      return '<div class="rk'+(!noBest&&i===best?' best':'')+'"><span class="av">'+r.ic+'</span><span><b>'+esc(r.name)+'</b><small>'+Math.round(r.min)+' min total'+(r.note?' · '+esc(r.note):'')+'</small></span>'+
-        '<span class="p"><strong>'+rm(r.total)+'</strong><em'+(saving?'':' style="background:var(--mint)"')+'>'+tag+'</em></span></div>';
-    }).join("")+'</div>';
-  }
-  function renderTransit(){
-    var el=$("transitCard"),z=inZone(),low=lowest();
-    var combo=TRANSIT.COMBOS[state.from]||null;
-    var hubs=TRANSIT.HUB_TRIPS[state.from];
-    var hubTrip=(TRANSIT.RAIL_HUBS.indexOf(state.to)>-1&&hubs&&hubs[state.to])||null;
-    transitInfo={full:false};
-    var head='<div class="card-head"><div><div class="k2">Skip the surge</div><h2>Ride + train</h2></div><span class="tag">Example</span></div>';
-    if(z&&!combo){el.hidden=true;el.innerHTML="";return}
-    el.hidden=false;
-    if(!z){
-      var ok='<div class="wrow ok"><span class="wic">'+ICON_CHECK+'</span><div><b>You’re outside the surge zone, so a ride from here is already the best value.</b></div><span></span></div>';
-      var extra=hubTrip?(low?cmpHtml(transitRows(low,null,hubTrip),low,true):'<div class="empty">Enter a price to compare</div>'):'';
-      el.innerHTML=head+ok+extra;
-      return;
-    }
-    var sB=stn(combo.board),sA=stn(combo.alight),a=place(state.from),dst=place(state.to),v=place(EVENT.at);
-    var line=TRANSIT.STATIONS.slice(TRANSIT.STATIONS.indexOf(sB),TRANSIT.STATIONS.indexOf(sA)+1);
-    var fb=fitBox([a,sB,sA,v],40,340/240),k=fb.w/300;
-    var d=routePath(sA,dst);
-    var map='<svg class="wmap tall" viewBox="'+fb.vb+'" preserveAspectRatio="xMidYMid slice" role="group" aria-label="Map showing the surge zone, a walk to the station, the train out of the zone and a shorter ride to the destination">'+
-      baseMap()+zoneMarkup(true,k,{hit:true})+
-      '<path d="'+d+'" fill="none" stroke="#C4F135" stroke-width="'+(8*k)+'" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>'+
-      '<path d="'+d+'" fill="none" stroke="#101410" stroke-width="'+(3.2*k)+'" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>'+
-      '<path d="M'+a.x+' '+a.y+' L'+sB.x+' '+sB.y+'" fill="none" stroke="#101410" stroke-width="3" stroke-dasharray="0.1 6" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="none"/>'+
-      railLine(line,3)+
-      '<g pointer-events="none">'+line.map(function(st){return stationMarker(st,k,true)}).join("")+'</g>'+
-      '<text x="'+(sA.x-9*k)+'" y="'+(sA.y+16*k)+'" text-anchor="end" '+FONT+' font-size="'+(8.5*k)+'" font-weight="800" fill="#101410" stroke="#F5FBEA" stroke-width="'+(3*k)+'" paint-order="stroke">Ride to '+esc(dst.n)+' \u2192</text>'+
-      pinMarkup(dst,"to",dst.n,k)+pinMarkup(a,"from",a.n,k)+'</svg>';
-    var legend='<div class="maplegend">'+legendSw("zone")+legendSw("walk")+legendSw("train")+legendSw("ride")+'</div>';
-    var rideFare=low?low*combo.rideRatio:0;
-    var steps='<div class="steps">'+
-      step(ICON_WALK,"Walk "+combo.walkMin+" min to "+combo.walkTo+" LRT","Head for the platform before the exit wave",combo.walkMin+" min")+
-      step(ICON_TRAIN,"LRT "+combo.stops+" stops to "+combo.alight,"About "+rm(combo.trainFare)+", wait about "+combo.waitMin+" min",(combo.waitMin+combo.trainMin)+" min")+
-      step(ICON_CAR,"Book a ride to "+state.to,low?"About "+rm(rideFare)+", a shorter trip outside the zone":"Enter a price to see the fare",combo.rideMin+" min")+
-      '</div>';
-    var cmp='<div class="k2" style="margin-bottom:-4px">Compare your options</div>'+(low?cmpHtml(transitRows(low,combo,hubTrip),low):'<div class="empty">Enter a price to compare</div>');
-    var note='<div class="heads">'+ICON_WARN+'<span>'+esc(combo.crowdNote)+'</span></div>';
-    var go='<button class="go" id="transitGo" type="button">Set pickup to '+esc(combo.alight)+'</button>';
-    if(low){
-      var tot=combo.trainFare+low*combo.rideRatio;
-      transitInfo={full:true,total:tot,save:low-tot,min:combo.walkMin+combo.waitMin+combo.trainMin+combo.rideMin};
-    }else transitInfo={full:true,total:null};
-    el.innerHTML=head+map+legend+steps+cmp+note+go;
-  }
+  function renderTransit(){$("transitCard").innerHTML=""}  // ride + train card: no sourced fares yet (hidden)
 
   function renderOpts(){
     var out=[],q=state.quotes.filter(function(x){return x.price>0}).slice().sort(function(a,b){return a.price-b.price});
     if(q.length>1&&q[0].price<q[q.length-1].price){
       out.push({t:"Book "+q[0].app+" now",s:"Lowest of your quotes, "+rm(q[q.length-1].price-q[0].price)+" less than "+q[q.length-1].app+".",i:'<path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/>'});
-    }
-    if(transitInfo.full){
-      var ts=transitInfo.total!=null?"About "+rm(transitInfo.total)+" in total"+(transitInfo.save>0.004?", save "+rm(transitInfo.save):"")+", "+Math.round(transitInfo.min)+" min.":"Enter a price to compare.";
-      out.push({t:"Take the train out of the zone",s:ts,i:TRAIN_PATH,go:"transit"});
     }
     out.push({t:"Check again in 15 min",s:"Expected "+sg(PCT[15])+"%, likely between "+sg(LO[15])+"% and "+sg(HI[15])+"%.",i:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>'});
     $("opts").innerHTML=out.map(function(o){
@@ -627,35 +502,11 @@ export default function App() {
     }).join("");
   }
 
-  function whyRow(r){
-    var w=Math.min(50,Math.abs(r.v)/14*50);
-    var bar=r.v===0?'':'<span class="bar '+(r.v<0?'dn':'up')+'" style="width:'+w+'%"></span>';
-    return '<div><div class="why-top"><span>'+esc(r.t)+'</span><span class="n">'+(r.v===0?"0":sg(r.v))+' pts</span></div><div class="why-src">'+esc(r.d)+' <em style="font-style:normal;opacity:.8">('+esc(r.src)+')</em></div><div class="track" role="img" aria-label="'+esc(r.t)+' moves the price '+(r.v<0?'down':r.v>0?'up':'not at all')+' by '+Math.abs(r.v)+' points">'+bar+'</div></div>';
-  }
-  function renderWhy(){
-    var z=inZone(),evt=z?EVENT.nearbyPts:0,wx=-5,tm=PCT[30]-wx-evt;
-    var rows=[
-      {t:"Time of day and weekday",d:"Saturday afternoons usually cool off after the lunch rush.",v:tm,src:"Model: time and weekday"},
-      {t:"Weather",d:"No rain expected, so fewer last-minute bookings.",v:wx,src:"Model: weather"},
-      {t:"Event nearby",d:z?"Your pickup is inside the surge zone of "+EVENT.name+", which pushes prices up.":"Your pickup is outside the surge zone of "+EVENT.name+", so the event adds nothing.",v:evt,src:EVENT.source+", pickup location"}
-    ];
-    var html=rows.map(whyRow).join("");
-    html+='<div class="axis"><span>← Cheaper</span><span>Pricier →</span></div>';
-    html+='<div class="net"><span>Net change at +30 min</span><b>'+sg(PCT[30])+'%</b></div>';
-    if(z)html+='<div class="heads">'+ICON_WARN+'<span>When '+esc(EVENT.name)+' ends (about '+esc(EVENT.ends)+' in this example), prices near the venue are likely to rise again.</span></div>';
-    $("why").innerHTML=html;
-  }
+  function renderWhy(){}  // the "why" list is filled from the model by realOnly()
 
   /* ---------- surge zone sheet ---------- */
   function mins(t){var p=t.split(":");return (+p[0])*60+(+p[1])}
   function fmtMin(m){m=((m%1440)+1440)%1440;var h=Math.floor(m/60),n=m%60;return (h<10?"0":"")+h+":"+(n<10?"0":"")+n}
-  function phaseNow(){
-    var d=new Date(),m=d.getHours()*60+d.getMinutes(),s=mins(EVENT.start),e=mins(EVENT.ends);
-    if(m<s)return 0;
-    if(m<e-15)return 1;
-    if(m<e+EVENT.easeMin)return 2;
-    return 3;
-  }
   function pickupLL(){return state.fromLatLon||PLACE_LATLON[state.from]||null}
   function nearEvents(){
     var a=pickupLL();if(!a)return [];
@@ -687,8 +538,8 @@ export default function App() {
       return '<div class="zs-status '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
         (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><small>'+lvl+'</small> · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
     }).join(""):'<div class="empty">No real events listed for today.</div>';
-    var note='<div class="zs-sec"><p class="sub">The dashed '+HERE_KM+' km circle on the map is about the area where our New York data saw prices '+
-      'rise right after games (Yankee Stadium, its own taxi zone). It has not been measured in Malaysia, so no % is shown. '+
+    var note='<div class="zs-sec"><p class="sub">The orange '+HERE_KM+' km circle on the map is about the area where our training data saw prices '+
+      'rise right after big games. It has not been measured in Malaysia, so no % is shown. '+
       'Each event links to its source.</p></div>';
     var acts='<div class="zs-acts"><button class="go" id="zsForecast" type="button">See forecast</button><button class="ghost" id="zsGot" type="button">Got it</button></div>';
     $("zsBody").innerHTML=head+rows+note+acts;
@@ -713,8 +564,6 @@ export default function App() {
   $("zoneSheet").addEventListener("click",function(e){
     var t=e.target.closest("button");if(!t)return;
     if(t.id==="zsClose"||t.id==="zsGot")closeZone();
-    else if(t.id==="zsWalk"){doWalk();closeZone()}
-    else if(t.id==="zsTrain"){closeZone(true);if($("fs").classList.contains("on"))closeFs(true);showTransit()}
     else if(t.id==="zsForecast"){closeZone(true);if($("fs").classList.contains("on"))closeFs(true);openRes($("predict"))}
   });
 
@@ -724,10 +573,6 @@ export default function App() {
     var sc=$("resScroll"),c=$(id);if(!c||c.hidden)return;
     var top=c.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop-12;
     sc.scrollTo({top:top,behavior:reduced()?"auto":"smooth"});
-  }
-  function showTransit(){
-    if($("res").classList.contains("on"))scrollToCard("transitCard");
-    else{openRes($("predict"));setTimeout(function(){scrollToCard("transitCard")},320)}
   }
   function openRes(opener){
     resOpener=opener||$("predict");
@@ -746,17 +591,6 @@ export default function App() {
   $("closeRes").onclick=function(){closeRes()};
   function setResRoute(){$("resRoute").textContent=state.from+" to "+state.to}
 
-  $("walkCard").addEventListener("click",function(e){
-    var z=e.target.closest("[data-zone]");
-    if(z){openZone(z);return}
-    if(e.target.closest("#walkGo"))doWalk();
-    else if(e.target.closest("#walkUndo"))doUndo();
-  });
-  $("transitCard").addEventListener("click",function(e){
-    var z=e.target.closest("[data-zone]");
-    if(z){openZone(z);return}
-    if(e.target.closest("#transitGo"))doTransit();
-  });
   function zoneKey(e){
     if(e.key!=="Enter"&&e.key!==" ")return;
     var z=e.target.closest&&e.target.closest("[data-zone]");
@@ -801,6 +635,47 @@ export default function App() {
   $("chipText").textContent="Events today";
   fetchEventsToday().then(function(ev){REAL_EVENTS=ev||[];EVENTS_LOADED=true;renderRadar();drawMain(false);drawBig()})
     .catch(function(){EVENTS_LOADED=true;renderRadar()});
+  fetchCaseStudies().then(renderStudies);
+  /* ---------- study cases (real ride data, reports/case_studies.md) ---------- */
+  function renderStudies(d){
+    var el=$("studies");if(!el)return;
+    if(!d||!d.event_exit||!d.surge_fallback){el.closest(".card").hidden=true;return}
+    var p=function(v){return (v>0?"+":"")+Math.round(v*100)+"%"};
+    // 1. event exit: learned curve (training games), minutes from the end
+    var e=d.event_exit,bins=Object.keys(e.learned_bins).map(Number).sort(function(a,b){return a-b});
+    var W=300,H=120,x=function(m){return 24+(m-bins[0])/(bins[bins.length-1]-bins[0])*(W-34)},y=function(v){return H-18-v/0.25*(H-40)};
+    var ev='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price vs a normal day around the end of an event">'+
+      '<line x1="'+x(0)+'" y1="6" x2="'+x(0)+'" y2="'+(H-18)+'" stroke="#101410" stroke-width="1"/>'+
+      '<text x="'+(x(0)+4)+'" y="'+(H-24)+'" font-size="9" fill="#101410">event ends</text>'+
+      '<line x1="24" y1="'+y(0)+'" x2="'+(W-10)+'" y2="'+y(0)+'" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
+      '<polyline points="'+bins.map(function(b){return x(b)+","+y(e.learned_bins[b])}).join(" ")+'" fill="none" stroke="#F26B1D" stroke-width="3" stroke-linejoin="round"/>'+
+      bins.map(function(b){return '<circle cx="'+x(b)+'" cy="'+y(e.learned_bins[b])+'" r="3" fill="#F26B1D"/>'}).join("")+
+      '<text x="'+(x(e.peak_window_min[0])+6)+'" y="'+(y(e.peak)-6)+'" font-size="10" font-weight="700" fill="#101410">'+p(e.peak)+'</text>'+
+      bins.filter(function(b){return b%30===0}).map(function(b){return '<text x="'+x(b)+'" y="'+(H-4)+'" font-size="9" fill="rgba(16,20,16,.6)" text-anchor="middle">'+(b>0?"+":"")+b+'</text>'}).join("")+
+      '</svg>';
+    // 2. high prices settle: actual vs model change at +30 min, by how high the price was
+    var rows=d.surge_fallback,bw=(W-40)/rows.length,y2=function(v){return 14+(-v)/0.12*(H-48)};
+    var sg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price change 30 minutes later, by how high the price was">'+
+      '<line x1="20" y1="14" x2="'+(W-10)+'" y2="14" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
+      rows.map(function(r,i){var cx=24+i*bw,a=Math.min(0,r.actual["30"]),m=Math.min(0,r.model["30"]);
+        return '<rect x="'+(cx+4)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(a)-14)+'" fill="#F26B1D" rx="2"/>'+
+          '<rect x="'+(cx+bw/2)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(m)-14)+'" fill="#101410" opacity=".55" rx="2"/>'+
+          '<text x="'+(cx+bw/2)+'" y="'+(Math.max(y2(a),y2(m))+11)+'" font-size="9" fill="#101410" text-anchor="middle">'+p(r.actual["30"])+'</text>'+
+          '<text x="'+(cx+bw/2)+'" y="'+(H-14)+'" font-size="9" fill="#101410" text-anchor="middle">'+esc(r.band.replace(/ \(.*\)/,""))+'</text><text x="'+(cx+bw/2)+'" y="'+(H-3)+'" font-size="8" fill="rgba(16,20,16,.55)" text-anchor="middle">'+r.n.toLocaleString()+' cases</text>'}).join("")+
+      '</svg>';
+    var hi=rows.filter(function(r){return r.band.indexOf("1.5")>=0&&r.band.indexOf("≥")===0})[0];
+    el.innerHTML=
+      '<div class="study"><h3>When a big event ends</h3>'+ev+
+      '<p class="sub">Right next to a baseball stadium, prices were <b>'+p(e.heldout_0_45)+'</b> vs a normal day in the 45 min after '+
+      e.heldout_games+' games the model never saw (learned from '+e.train_games+' games: '+p(e.learned_0_45)+'). Peak right after the end.</p></div>'+
+      (hi?'<div class="study"><h3>When the price is already high</h3>'+sg+
+      '<div class="legend"><span><i style="width:10px;height:10px;background:#F26B1D;border-radius:2px"></i>Actual, 30 min later</span><span><i style="width:10px;height:10px;background:#101410;opacity:.55;border-radius:2px"></i>Model said</span></div>'+
+      '<p class="sub">At '+esc(hi.band)+' normal, prices fell <b>'+Math.round(-hi.actual["30"]*100)+'%</b> in 30 min on average; a ≥10% drop happened '+
+      Math.round(hi.drop10_actual_30*100)+'% of the time (model said '+Math.round(hi.drop10_model_30*100)+'%). High prices settle back down — a simple time-of-day rule catches this too.</p></div>':'')+
+      '<div class="study"><h3>When a jam is coming</h3><p class="sub">With pickup and destination set, we check predicted trip time for leaving now vs in 15–60 min. '+
+      'If the trip gets 25% longer, waiting is off: <b>Book now — jam coming</b>. Traffic did not help predict the price itself, so we show minutes, not a %.</p></div>'+
+      '<div class="why-src">Measured on real ride-hailing data (2024), test days held out — not measured in Malaysia. Source: reports/case_studies.md</div>';
+  }
   initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
 })();
@@ -867,10 +742,10 @@ export default function App() {
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
           <div className="qrow">
-            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Harga biasa (optional)" aria-label="Usual price for this trip (optional)" /></div>
-            <label className="ghost"><input id="rain" type="checkbox" /> Hujan</label>
+            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Usual price (optional)" aria-label="Usual price for this trip (optional)" /></div>
+            <label className="ghost"><input id="rain" type="checkbox" /> Rain</label>
           </div>
-          <p className="note">Tahu harga biasa? Masukkan untuk ramalan lebih tepat.</p>
+          <p className="note">Know your usual price for this trip? Add it for a sharper forecast.</p>
           <div className="row-actions">
             <button className="ghost" id="addApp" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
@@ -958,7 +833,14 @@ export default function App() {
           <div className="rank" id="rank"></div>
         </section>
 
-        <p className="foot">Forecast from our model, tested on 19M real ride-hailing trips (NYC, Aug 2024), applied to your typed prices and local time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
+        <section className="card" aria-labelledby="st">
+          <div className="card-head">
+            <div><h2 id="st">What we saw in real ride data</h2><p className="sub">Three moments when prices move, measured on real trips.</p></div>
+          </div>
+          <div id="studies"></div>
+        </section>
+
+        <p className="foot">Trained and tested on 19M real ride-hailing trips (NYC TLC Uber/Lyft records, Aug 2024), applied to your typed prices and local KL time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
 
         </div>
       </div>

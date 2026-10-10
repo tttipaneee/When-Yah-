@@ -68,7 +68,7 @@ def test_demo_scenarios_run_real_forecast():
     r = client.get("/api/demo")
     assert r.status_code == 200
     d = r.json()
-    assert len(d) == 4 and all(s["label"].startswith("contoh") for s in d)
+    assert len(d) == 4 and all(s["label"].startswith("example") for s in d)
     for s in d:
         assert s["response"]["model_version"].startswith("lgbm_v1/")
         assert set(s["response"]["wait_odds"]["rm_range"]) == {q["app"] for q in s["request"]["quotes"]}
@@ -106,7 +106,7 @@ def test_tunggu_only_when_rule_validated_and_odds_high():
     gate = decision_rule().get("variants", {}).get("with_level", {})
     if d["decision"] == "wait":
         assert gate.get("validated") and d["wait_minutes"] in (15, 30, 45, 60)
-        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Tunggu") for r in d["reasons"])
+        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Wait ") for r in d["reasons"])
     quiet = {**BODY, "datetime": "2026-10-13T14:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 12.0}],
              "usual_price_rm": 15.0}
     assert client.post("/api/forecast", json=quiet).json()["decision"] == "book_now"
@@ -121,7 +121,7 @@ def test_traffic_jam_flips_tunggu_and_warns():
         d = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 32}}).json()
         assert d["decision"] == "book_now" and d["traffic"]["flipped_to_book_now"]
         assert any(r.startswith("Book now — jam coming") for r in d["reasons"])
-        assert not any(r.startswith("Tunggu") for r in d["reasons"])
+        assert not any(r.startswith("Wait ") for r in d["reasons"])
         clear = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 18}}).json()
         assert clear["decision"] == "wait" and not clear["traffic"]["jam_ahead"]
     quiet = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 22.0}],
@@ -143,8 +143,10 @@ def test_tomtom_traffic_used_when_pickup_and_dropoff(monkeypatch):
 
 
 def test_no_tomtom_key_means_no_traffic(monkeypatch):
+    import api.traffic as tr
     from api.traffic import predicted_minutes
     monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
+    monkeypatch.setattr(tr, "_ENV", "/nonexistent/.env")
     assert predicted_minutes((3.158, 101.7117), (3.1177, 101.6774), __import__("datetime").datetime.now()) is None
 
 
@@ -156,3 +158,69 @@ def test_event_levels_right_here_and_in_area():
     area = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0763304, "lon": 101.7111343}}).json()
     e = next(x for x in area["events"] if "MAMAMOO" in x["name"])  # Bandar Tasik Selatan, ~3 km away
     assert e["level"] == "in_area" and 1.0 < e["km"] <= 5.0
+
+
+def test_grab_per_minute_note_when_trip_gets_longer(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 20.0, 15: 21.0, 30: 23.0, 45: 24.0, 60: 24.0})
+    body = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "pickup": {"lat": 3.158, "lon": 101.7117},
+            "dropoff": {"lat": 3.1177, "lon": 101.6774}, "quotes": [{"app": "grab", "price_rm": 15.0}],
+            "usual_price_rm": 15.0}
+    d = client.post("/api/forecast", json=body).json()
+    assert any("per-minute charge" in r for r in d["reasons"])
+    no_grab = {**body, "quotes": [{"app": "indrive", "price_rm": 15.0}]}
+    assert not any("per-minute" in r for r in client.post("/api/forecast", json=no_grab).json()["reasons"])
+
+
+def test_wait_never_shown_while_expected_price_rises():
+    # sweep a day of times and prices: whenever the answer is "Wait", the expected price there is below now
+    for hh in range(6, 24, 2):
+        for price in (15.0, 25.0, 40.0):
+            body = {**BODY, "datetime": f"2026-10-16T{hh:02d}:10:00+08:00",
+                    "quotes": [{"app": "grab", "price_rm": price}], "usual_price_rm": 20.0}
+            d = client.post("/api/forecast", json=body).json()
+            if d["decision"] == "wait":
+                h = next(x for x in d["horizon"] if x["minutes"] == d["wait_minutes"])
+                assert h["pct_change"] < 0
+
+
+def test_route_km_and_minutes_now_for_the_map(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 18.0, 15: 19.0, 30: 20.0, 45: 20.0, 60: 20.0})
+    monkeypatch.setattr(f, "route_km_now", lambda a, b, t: 7.4)
+    body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
+    d = client.post("/api/forecast", json=body).json()
+    assert d["traffic"]["km"] == 7.4 and d["traffic"]["minutes"]["0"] == 18.0
+
+
+def test_event_exit_hint_in_words_only_near_end():
+    from api.forecast import event_effect
+    zepp = {"lat": 3.1394413, "lon": 101.7091281}  # Eunji concert ends 23:00 on 11 Oct (published end)
+    near_end = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp}).json()
+    early = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T20:30:00+08:00", "pickup": zepp}).json()
+    hint = [r for r in near_end["reasons"] if r.startswith("Event ending right here")]
+    assert not any(r.startswith("Event ending right here") for r in early["reasons"])
+    if event_effect():
+        assert hint and "ends at 23:00" in hint[0] and "book before" not in hint[0]
+        assert "%" not in hint[0] and "NYC" not in hint[0] and "New York" not in hint[0]
+
+
+def test_case_studies_match_report():
+    d = client.get("/api/case_studies").json()
+    md = open("reports/case_studies.md", encoding="utf-8").read()
+    e = d["event_exit"]
+    assert f"actual **{e['heldout_0_45']:+.0%}** vs learned {e['learned_0_45']:+.0%}" in md
+    assert f"peak **{e['peak']:+.0%}**" in md
+    assert f"Training games: {e['train_games']}; held-out games: {e['heldout_games']}" in md
+    assert "bin means: " + ", ".join(f"{int(b):+d}: {v:+.0%}" for b, v in e["learned_bins"].items()) + ")" in md
+    assert f"learned curve **{e['error_learned']:.1%}** vs \"no event effect\" {e['error_no_effect']:.1%}" in md
+    for r in d["surge_fallback"]:
+        assert (f"| {r['band']} | {r['n']:,} | {r['actual']['30']:+.1%} / {r['actual']['60']:+.1%} | "
+                f"{r['model']['30']:+.1%} / {r['model']['60']:+.1%} | {r['drop10_actual_30']:.0%} | "
+                f"{r['drop10_model_30']:.0%} |") in md
+
+
+def test_no_hundred_percent_drop_chance():
+    # audit fix: a thin isotonic top step must not show "100% chance" (ml.train.drop_prob caps it)
+    for s in client.get("/api/demo").json():
+        assert all(h["p_drop10"] < 0.9 for h in s["response"]["horizon"])

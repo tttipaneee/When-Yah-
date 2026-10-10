@@ -26,7 +26,7 @@ python -m pytest -q tests                                     # API contract tes
 `/api/forecast` uses LightGBM models trained on real NYC Uber/Lyft trips (Aug 2024), committed at
 `ml/models/lgbm_v1.joblib` (`lgbm_v1/with_level` when a usual price is given, else `lgbm_v1/no_level`).
 RM values are always the user's typed quote × a predicted % change. `GET /api/demo` runs four presenter
-scenarios (example prices, labelled "contoh").
+scenarios (example prices, labelled "example").
 
 ## What it does — and what we found (every number from `reports/`)
 The headline is **the chance that waiting 30 min gets a price ≥ 10% lower**, next to the usual chance.
@@ -36,15 +36,22 @@ The headline is **the chance that waiting 30 min gets a price ≥ 10% lower**, n
 | Odds are calibrated (test days, isotonic fit on val) | top decile: predicted 23.3%, observed 23.3% | `reports/metrics.md` §2 |
 | Odds rise with "price ÷ usual price" | jam demo (≈1.9× usual): 45% vs usual 12% | `GET /api/demo` |
 | Ranking good vs bad moments | ROC-AUC 0.589 (0.5 = coin flip) | `reports/metrics.md` §2 |
-| "Tunggu" rule beats "book now"? | **Yes** — +0.20% overall; when it says wait (≥ 20% chance of a ≥10% drop) it saves 2.3% on average; ~4 in 10 waits still cost more | `reports/decision.json` |
+| "Wait" rule beats "book now"? | **Yes** — +0.20% overall; when it says wait (≥ 20% chance of a ≥10% drop) it saves 2.2% on average; ~4 in 10 waits still cost more | `reports/decision.json` |
 | …and beats the hour-of-day rule? | **No** — the hour-of-day rule saves slightly more (+0.29% vs +0.20%) | `reports/decision.json` |
-| When price ≥ 1.5× usual? | Waiting saved ~4.5%, but high prices fall back anyway (time-of-day rule +5.1%, always wait 30 min +4.1%) | `reports/decision.json` |
+| When price ≥ 1.5× usual? | Waiting saved ~4.3%, but high prices fall back anyway (time-of-day rule +5.1%, always wait 30 min +4.1%) | `reports/decision.json` |
 
-Disclosure: the gate for showing "Tunggu" was changed on 10 Oct 2026 after we saw test results (originally it had
-to beat both baselines and failed); treat the "Tunggu" result as exploratory.
+Disclosure: the gate for showing "Wait" was changed on 10 Oct 2026 after we saw test results (originally it had
+to beat both baselines and failed); so were the 20% minimum and a guard that never says "Wait" next to a
+rising forecast line. The guard is **untested on held-out days** (we chose not to re-score the same test days
+again) and no saving is claimed for it. k picked on val = 1.0, the lowest value tried, so the 20% minimum
+does the work. Treat the "Wait" result as exploratory. Full list: `reports/metrics.md`, end.
 
-So the app says **"Tunggu X min"** when the odds are clearly above usual, otherwise **book now**, and always
+So the app says **"Wait X min"** when the odds are clearly above usual, otherwise **book now**, and always
 shows how often waiting still cost more in tests.
+
+**Traffic (optional TomTom key):** predicted trip time for leaving now … +60 min. A jam (≥ 25% longer) turns
+"Wait" into "Book now — jam coming"; if a Grab trip gets clearly longer later, the app notes that Grab's fare
+includes a per-minute charge ([Grab fare change, Jan 2023](https://carz.com.my/2023/01/grab-revises-fare-structure-rides-during-peak-hours-to-cost-more)) — words only, no RM estimate.
 
 **Tested and rejected** (rules fixed in code before each run): a second quote / price trend
 (`reports/trend_experiment.md`), borough-wide averaging (`reports/borough_experiment.md`, inconclusive),
