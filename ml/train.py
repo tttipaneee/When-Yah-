@@ -48,7 +48,18 @@ def clf_for(name: str, feats: list[str]) -> lgb.LGBMClassifier:
 def drop_prob(m: dict, X) -> np.ndarray:
     """Calibrated P(drop >= 10%) — use this everywhere (evaluate, API), never m["clf"] directly."""
     p = m["clf"].predict_proba(X)[:, 1]
-    return m["cal"].predict(p) if "cal" in m else p
+    if "cal" not in m:
+        return p
+    q = m["cal"].predict(p)
+    # Audit fix (10 Oct, post hoc): an isotonic top step that jumps > 0.2 above the step below rests on a handful
+    # of val windows (with_level +15 jumped 0.346 -> 1.0 and the app showed "100% chance"); cap at the step below
+    y = np.unique(m["cal"].y_thresholds_)
+    if len(y) > 1 and y[-1] - y[-2] > TOP_STEP_JUMP:
+        q = np.minimum(q, y[-2])
+    return q
+
+
+TOP_STEP_JUMP = 0.2
 
 
 K_GRID = (1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0)

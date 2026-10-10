@@ -201,7 +201,7 @@ def test_event_exit_hint_in_words_only_near_end():
     hint = [r for r in near_end["reasons"] if r.startswith("Event ending right here")]
     assert not any(r.startswith("Event ending right here") for r in early["reasons"])
     if event_effect():
-        assert hint and "book before 23:00" in hint[0]
+        assert hint and "ends at 23:00" in hint[0] and "book before" not in hint[0]
         assert "%" not in hint[0] and "NYC" not in hint[0] and "New York" not in hint[0]
 
 
@@ -211,5 +211,16 @@ def test_case_studies_match_report():
     e = d["event_exit"]
     assert f"actual **{e['heldout_0_45']:+.0%}** vs learned {e['learned_0_45']:+.0%}" in md
     assert f"peak **{e['peak']:+.0%}**" in md
+    assert f"Training games: {e['train_games']}; held-out games: {e['heldout_games']}" in md
+    assert "bin means: " + ", ".join(f"{int(b):+d}: {v:+.0%}" for b, v in e["learned_bins"].items()) + ")" in md
+    assert f"learned curve **{e['error_learned']:.1%}** vs \"no event effect\" {e['error_no_effect']:.1%}" in md
     for r in d["surge_fallback"]:
-        assert f"| {r['band']} | {r['n']:,} | {r['actual']['30']:+.1%} / {r['actual']['60']:+.1%} |" in md
+        assert (f"| {r['band']} | {r['n']:,} | {r['actual']['30']:+.1%} / {r['actual']['60']:+.1%} | "
+                f"{r['model']['30']:+.1%} / {r['model']['60']:+.1%} | {r['drop10_actual_30']:.0%} | "
+                f"{r['drop10_model_30']:.0%} |") in md
+
+
+def test_no_hundred_percent_drop_chance():
+    # audit fix: a thin isotonic top step must not show "100% chance" (ml.train.drop_prob caps it)
+    for s in client.get("/api/demo").json():
+        assert all(h["p_drop10"] < 0.9 for h in s["response"]["horizon"])

@@ -263,7 +263,12 @@ def main() -> None:
           "",
           "**Level in training vs in the app.** In training, level = trip fare ÷ expected fare for its distance and "
           "duration (fit on train days). In the app, level = the user's quote ÷ the usual price they type. Similar in "
-          "spirit, not the same quantity."]
+          "spirit, not the same quantity.", "",
+          "**Audit notes (10 Oct 2026).** Calibration cap: an isotonic top step that jumps > 0.2 above the step below "
+          "is capped at that step (ml.train.drop_prob; added after the app showed \"100% chance\"). Isotonic "
+          "calibration and k are both fit on the same val days, so k is chosen on in-sample calibrated probabilities. "
+          "Two doubleheader second games (mlb-745713, mlb-745708) carry the first game's scheduled start, so their "
+          "event features are misaligned; event features are not served for Malaysia."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}
                   for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]

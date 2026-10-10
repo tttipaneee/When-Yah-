@@ -96,7 +96,7 @@ def case_event(L: list) -> None:
         "error_learned": round(float(mae_model), 3), "error_no_effect": round(float(mae_none), 3)}
 
     L += ["## 1. Event exit — Yankee Stadium (real MLB games, Aug 2024)", "",
-          "Price index in the stadium's own taxi zone (~0.75 km radius) by minutes from the end of the game, vs the",
+          "Price index in the stadium's own taxi zone by minutes from the end of the game, vs the",
           "same zone at the same clock time on non-game days. The **model** is the average curve of the training games;",
           "it is tested on games it never saw.", "", "![event exit](case_event_exit.png)", "",
           f"- Training games: {len(tr)}; held-out games: {len(te)} (all Yankee Stadium; Citi Field had no home games in the test days).",

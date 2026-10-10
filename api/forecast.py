@@ -80,7 +80,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
-HERE_KM = 1.0  # "right here": about the venue's own NYC taxi zone (~0.75-1.3 km), where the effect was measured
+HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's own NYC taxi zone where the effect was measured
 JAM_FACTOR = 1.25
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
@@ -104,6 +104,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     nearest = min(nearby, key=lambda e: abs((e.start - req.datetime).total_seconds()), default=None)
     pred, variant, level = _predict(req, quotes, nearest)
 
+    raw_p = {m: vals[3] for m, vals in pred.items()}  # unrounded P(drop) for the 20% minimum (same as ml.train.tunggu)
     pred = {m: tuple(round(v, 4) for v in vals) for m, vals in pred.items()}
     horizon = [HorizonPoint(minutes=m, pct_change=pc, pct_low=lo, pct_high=hi, p_drop10=round(p, 3),
                             expected_rm={a: round(rm * (1 + pc), 2) for a, rm in quotes.items()})
@@ -120,9 +121,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
     base = load_bundle()["base_rate"]
-    mults = {h.minutes: h.p_drop10 / base[h.minutes] for h in horizon}
+    mults = {m: raw_p[m] / base[m] for m in raw_p}
     best = max(horizon, key=lambda h: mults[h.minutes])
-    odds_high = k is not None and mults[best.minutes] >= k and best.p_drop10 >= MIN_WAIT_P
+    odds_high = k is not None and mults[best.minutes] >= k and raw_p[best.minutes] >= MIN_WAIT_P
     # product rule (10 Oct, same as ml/train.tunggu): never "Wait" while the expected price there is not below now
     falling = best.pct_change < 0
     wait = bool(gate.get("validated")) and odds_high and falling
@@ -187,7 +188,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     if wait:
         surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
         ev = (f"in our tests on real ride data, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
-              f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well)"
+              f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well or better)"
               if surge else f"in our tests on real ride data, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
               "on average (a simple time-of-day rule saved slightly more overall)")
         reasons.append(f"Wait {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
@@ -232,9 +233,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
             ev_reasons.append(
                 f"Event ending right here: {e.name} " + (f"ends at {e.end:%H:%M}" if to_end > 0 else
                                                          f"ended at {e.end:%H:%M}")
-                + ". In our ride data, prices right next to a venue went up for up to ~45 min after a big event "
-                "ended" + (f" — book before {e.end:%H:%M} if you can" if to_end > 0 else "")
-                + " (not yet measured in Malaysia)")
+                + ". In our ride data, prices right next to a stadium were higher for at least the first ~45 min "
+                "after games ended (not yet measured in Malaysia)")
         ev_reasons.append(f"{where}: {e.name}" + (
             " — in our training data, prices within ~1 km of a stadium rose right after games; not measured for "
             "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))
