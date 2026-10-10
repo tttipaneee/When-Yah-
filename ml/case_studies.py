@@ -10,6 +10,7 @@
 Dev-only dependency: matplotlib (charts). Usage: python -m ml.case_studies
 """
 from datetime import date
+import json
 from pathlib import Path
 
 import joblib
@@ -55,6 +56,9 @@ def event_curves(z: pd.DataFrame, games: pd.DataFrame, ctrl_days: set) -> pd.Dat
     return pd.DataFrame(rows)
 
 
+CS: dict = {"source": "reports/case_studies.md"}  # same numbers as the report, for the app's study-case card
+
+
 def case_event(L: list) -> None:
     z = pd.read_parquet(ROOT / "data" / "processed" / "windows.parquet")
     ev = load_nyc_events()
@@ -84,6 +88,12 @@ def case_event(L: list) -> None:
     ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:+.0f}%"))
     ax.legend(frameon=False, fontsize=9, loc="lower right")
     fig.tight_layout(); fig.savefig(REP / "case_event_exit.png"); plt.close(fig)
+    CS["event_exit"] = {
+        "train_games": len(tr), "heldout_games": len(te), "peak": round(float(fit[peak_bin]), 2),
+        "peak_window_min": [int(peak_bin), int(peak_bin) + 15],
+        "learned_bins": {int(b): round(float(v), 2) for b, v in fit.items() if -30 <= b <= 90},
+        "heldout_0_45": round(float(post.uplift.mean()), 2), "learned_0_45": round(float(post.pred.mean()), 2),
+        "error_learned": round(float(mae_model), 3), "error_no_effect": round(float(mae_none), 3)}
 
     L += ["## 1. Event exit — Yankee Stadium (real MLB games, Aug 2024)", "",
           "Price index in the stadium's own taxi zone (~0.75 km radius) by minutes from the end of the game, vs the",
@@ -139,6 +149,12 @@ def case_surge(L: list) -> None:
           "![surge fall-back](case_surge_fallback.png)", "",
           "| Price now | Cases | Actual change at +30 / +60 min | Model predicted | Actual chance of ≥10% drop by +30 | Model said |",
           "|---|---|---|---|---|---|"]
+    CS["surge_fallback"] = [
+        {"band": name, "n": int(g.n.iloc[0]),
+         "actual": {30: round(float(g.actual[30]), 3), 60: round(float(g.actual[60]), 3)},
+         "model": {30: round(float(g.pred[30]), 3), 60: round(float(g.pred[60]), 3)},
+         "drop10_actual_30": round(float(g.drop_actual[30]), 2), "drop10_model_30": round(float(g.drop_pred[30]), 2)}
+        for name, _ in bands for g in [r[r.band == name].set_index("h")]]
     for name, _ in bands:
         g = r[r.band == name].set_index("h")
         L.append(f"| {name} | {int(g.n.iloc[0]):,} | {g.actual[30]:+.1%} / {g.actual[60]:+.1%} | "
@@ -156,6 +172,7 @@ def main() -> None:
     case_event(L)
     case_surge(L)
     (REP / "case_studies.md").write_text("\n".join(L) + "\n", encoding="utf-8")
+    (REP / "case_studies.json").write_text(json.dumps(CS, indent=1), encoding="utf-8")
     print("\n".join(L))
 
 

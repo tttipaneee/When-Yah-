@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchCaseStudies, fetchEventsToday, kmBetween, klTime } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -833,6 +833,47 @@ export default function App() {
   $("chipText").textContent="Events today";
   fetchEventsToday().then(function(ev){REAL_EVENTS=ev||[];EVENTS_LOADED=true;renderRadar();drawMain(false);drawBig()})
     .catch(function(){EVENTS_LOADED=true;renderRadar()});
+  fetchCaseStudies().then(renderStudies);
+  /* ---------- study cases (real ride data, reports/case_studies.md) ---------- */
+  function renderStudies(d){
+    var el=$("studies");if(!el)return;
+    if(!d||!d.event_exit||!d.surge_fallback){el.closest(".card").hidden=true;return}
+    var p=function(v){return (v>0?"+":"")+Math.round(v*100)+"%"};
+    // 1. event exit: learned curve (training games), minutes from the end
+    var e=d.event_exit,bins=Object.keys(e.learned_bins).map(Number).sort(function(a,b){return a-b});
+    var W=300,H=120,x=function(m){return 24+(m-bins[0])/(bins[bins.length-1]-bins[0])*(W-34)},y=function(v){return H-18-v/0.25*(H-40)};
+    var ev='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price vs a normal day around the end of an event">'+
+      '<line x1="'+x(0)+'" y1="6" x2="'+x(0)+'" y2="'+(H-18)+'" stroke="#101410" stroke-width="1"/>'+
+      '<text x="'+(x(0)+4)+'" y="'+(H-24)+'" font-size="9" fill="#101410">event ends</text>'+
+      '<line x1="24" y1="'+y(0)+'" x2="'+(W-10)+'" y2="'+y(0)+'" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
+      '<polyline points="'+bins.map(function(b){return x(b)+","+y(e.learned_bins[b])}).join(" ")+'" fill="none" stroke="#F26B1D" stroke-width="3" stroke-linejoin="round"/>'+
+      bins.map(function(b){return '<circle cx="'+x(b)+'" cy="'+y(e.learned_bins[b])+'" r="3" fill="#F26B1D"/>'}).join("")+
+      '<text x="'+(x(e.peak_window_min[0])+6)+'" y="'+(y(e.peak)-6)+'" font-size="10" font-weight="700" fill="#101410">'+p(e.peak)+'</text>'+
+      bins.filter(function(b){return b%30===0}).map(function(b){return '<text x="'+x(b)+'" y="'+(H-4)+'" font-size="9" fill="rgba(16,20,16,.6)" text-anchor="middle">'+(b>0?"+":"")+b+'</text>'}).join("")+
+      '</svg>';
+    // 2. high prices settle: actual vs model change at +30 min, by how high the price was
+    var rows=d.surge_fallback,bw=(W-40)/rows.length,y2=function(v){return 14+(-v)/0.12*(H-48)};
+    var sg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price change 30 minutes later, by how high the price was">'+
+      '<line x1="20" y1="14" x2="'+(W-10)+'" y2="14" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
+      rows.map(function(r,i){var cx=24+i*bw,a=Math.min(0,r.actual["30"]),m=Math.min(0,r.model["30"]);
+        return '<rect x="'+(cx+4)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(a)-14)+'" fill="#F26B1D" rx="2"/>'+
+          '<rect x="'+(cx+bw/2)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(m)-14)+'" fill="#101410" opacity=".55" rx="2"/>'+
+          '<text x="'+(cx+bw/2)+'" y="'+(Math.max(y2(a),y2(m))+11)+'" font-size="9" fill="#101410" text-anchor="middle">'+p(r.actual["30"])+'</text>'+
+          '<text x="'+(cx+bw/2)+'" y="'+(H-14)+'" font-size="9" fill="#101410" text-anchor="middle">'+esc(r.band.replace(/ \(.*\)/,""))+'</text><text x="'+(cx+bw/2)+'" y="'+(H-3)+'" font-size="8" fill="rgba(16,20,16,.55)" text-anchor="middle">'+r.n.toLocaleString()+' cases</text>'}).join("")+
+      '</svg>';
+    var hi=rows.filter(function(r){return r.band.indexOf("1.5")>=0&&r.band.indexOf("≥")===0})[0];
+    el.innerHTML=
+      '<div class="study"><h3>When a big event ends</h3>'+ev+
+      '<p class="sub">Right next to a baseball stadium, prices were <b>'+p(e.heldout_0_45)+'</b> vs a normal day in the 45 min after '+
+      e.heldout_games+' games the model never saw (learned from '+e.train_games+' games: '+p(e.learned_0_45)+'). Peak right after the end.</p></div>'+
+      (hi?'<div class="study"><h3>When the price is already high</h3>'+sg+
+      '<div class="legend"><span><i style="width:10px;height:10px;background:#F26B1D;border-radius:2px"></i>Actual, 30 min later</span><span><i style="width:10px;height:10px;background:#101410;opacity:.55;border-radius:2px"></i>Model said</span></div>'+
+      '<p class="sub">At '+esc(hi.band)+' normal, prices fell <b>'+Math.round(-hi.actual["30"]*100)+'%</b> in 30 min on average; a ≥10% drop happened '+
+      Math.round(hi.drop10_actual_30*100)+'% of the time (model said '+Math.round(hi.drop10_model_30*100)+'%). High prices settle back down — a simple time-of-day rule catches this too.</p></div>':'')+
+      '<div class="study"><h3>When a jam is coming</h3><p class="sub">With pickup and destination set, we check predicted trip time for leaving now vs in 15–60 min. '+
+      'If the trip gets 25% longer, waiting is off: <b>Book now — jam coming</b>. Traffic did not help predict the price itself, so we show minutes, not a %.</p></div>'+
+      '<div class="why-src">Measured on real ride-hailing data (2024), test days held out — not measured in Malaysia. Source: reports/case_studies.md</div>';
+  }
   initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
 })();
@@ -988,6 +1029,13 @@ export default function App() {
             <div><h2 id="rt">Your apps, now vs <span id="bestAt">18:40</span></h2><p className="sub">Cheapest first, based on the prices you typed.</p></div>
           </div>
           <div className="rank" id="rank"></div>
+        </section>
+
+        <section className="card" aria-labelledby="st">
+          <div className="card-head">
+            <div><h2 id="st">What we saw in real ride data</h2><p className="sub">Three moments when prices move, measured on real trips.</p></div>
+          </div>
+          <div id="studies"></div>
         </section>
 
         <p className="foot">Trained and tested on 19M real ride-hailing trips (NYC TLC Uber/Lyft records, Aug 2024), applied to your typed prices and local KL time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>

@@ -203,3 +203,13 @@ def test_event_exit_hint_in_words_only_near_end():
     if event_effect():
         assert hint and "book before 23:00" in hint[0]
         assert "%" not in hint[0] and "NYC" not in hint[0] and "New York" not in hint[0]
+
+
+def test_case_studies_match_report():
+    d = client.get("/api/case_studies").json()
+    md = open("reports/case_studies.md", encoding="utf-8").read()
+    e = d["event_exit"]
+    assert f"actual **{e['heldout_0_45']:+.0%}** vs learned {e['learned_0_45']:+.0%}" in md
+    assert f"peak **{e['peak']:+.0%}**" in md
+    for r in d["surge_fallback"]:
+        assert f"| {r['band']} | {r['n']:,} | {r['actual']['30']:+.1%} / {r['actual']['60']:+.1%} |" in md

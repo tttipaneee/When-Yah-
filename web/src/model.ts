@@ -82,6 +82,11 @@ export function fetchEventsToday(): Promise<RealEvent[]> {
   return fetch(`/api/events?date=${klDate}`).then((r) => (r.ok ? r.json() : []))
 }
 
+/** Study cases from /api/case_studies (reports/case_studies.json = numbers of reports/case_studies.md). */
+export function fetchCaseStudies(): Promise<any> {
+  return fetch("/api/case_studies").then((r) => (r.ok ? r.json() : null)).catch(() => null)
+}
+
 /** Great-circle distance in km. */
 export function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const R = 6371, rad = Math.PI / 180

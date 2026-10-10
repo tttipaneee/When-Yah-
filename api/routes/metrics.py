@@ -19,6 +19,12 @@ def _json(name: str) -> dict | None:
     return json.loads(t) if t else None
 
 
+@router.get("/api/case_studies")
+def get_case_studies() -> dict:
+    """Study cases (event exit, surge fall-back) from reports/case_studies.json — numbers of reports/case_studies.md."""
+    return _json("case_studies.json") or {}
+
+
 @router.get("/api/metrics")
 def get_metrics() -> dict:
     """Report texts plus structured numbers for the judges' screen; every number comes from reports/."""
