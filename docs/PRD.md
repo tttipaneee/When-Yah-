@@ -9,12 +9,16 @@ can't tell if the price will drop if they wait. Consumer groups say e-hailing fa
 rising without transparency (NST letter, 15 Feb 2026). Comparison apps exist overseas (Obi, Hackney,
 Bellhop) but not for Malaysian apps, and none clearly says *when* to book.
 
-**Solution.** The user types the price(s) they see. We predict how that price will change over the next
-60 minutes and turn it into a decision: book now or wait until X, which of their quoted apps is likely
-cheapest at that time, and whether a real event nearby is likely to push prices up.
+**Solution (revised 10 Oct, after testing).** Like booking in Grab: the user picks Dari/Ke, types the
+price(s) their apps show and their usual price ("harga biasa"). When Yah? answers with **the odds that
+waiting 30 min gets a price ≥ 10% lower** ("Peluang harga turun ≥10%: 36% — biasa 12%"), the likely RM
+range per quoted app, book now or wait, and real events nearby (with sources).
 
-**Proof.** On held-out real ride data, following our advice saves more than "always book now" and
-"hour-of-day average" baselines (`reports/metrics.md`).
+**Proof.** On held-out real ride data (19M NYC Uber/Lyft trips, Aug 2024) the odds are **calibrated**
+(when we say ~21%, it happened 21% of the time) and rise sharply when the price is far above normal.
+We also report plainly what does **not** work: no waiting rule we tested beat a simple "hour-of-day"
+rule on savings, so the app says "book now" unless a tested rule passes (`reports/metrics.md`,
+`reports/decision.json`). Experiments that failed are listed in §10.
 
 **Evidence rule.** Every number traces to real data or a cited, dated source. No invented fares,
 multipliers or per-app prices (see `CLAUDE.md`).
@@ -40,13 +44,13 @@ P0 = must work in demo · P1 = should · P2 = only if ahead.
 | ID | Requirement | Pri |
 |---|---|---|
 | FR1 | **"Masukkan harga yang anda nampak":** enter one or more real quotes (app + RM) and date/time | P0 |
-| FR2 | **When Yah? forecast:** % change with low/high band at +15/30/45/60 min, P(drop ≥10% within 30 min), decision book_now/wait, best time, countdown; RM values only for quoted apps | P0 |
-| FR3 | Ranking of the user's quoted apps now vs at best time | P0 |
-| FR4 | Optional **"harga biasa"** (usual price) input that tells the model whether the user is currently in a surge | P1 |
+| FR2 | **When Yah? odds (headline):** chance waiting 30 min saves ≥10% vs the usual chance, p10–p90 RM range per quoted app; % change with band at +15/30/45/60; decision book_now/wait — `wait` only if the tested rule in `reports/decision.json` is validated; "Kenapa mahal?" line | P0 |
+| FR3 | Cheapest of the user's quoted apps now (all apps get the same % change — we have no per-app data) | P0 |
+| FR4 | **"Harga biasa"** (usual price) input — the model's key input; without it the odds stay near usual. Optional helper: estimate from route (Dari/Ke) only if `reports/fare_check.md` passes | **P0** |
 | FR5 | Event radar: real events near the pickup on the chosen date (with source link); learned effect shown only if validated in `reports/event_effect.md` | P0 (list) / P1 (effect) |
 | FR6 | Judges' metrics screen: policy savings vs baselines, P(drop) AUC, forecast error vs persistence, event-effect result | P0 (pitch) |
 | FR7 | Rain toggle that changes the forecast | P1 |
-| FR8 | Presenter route `/demo`: preset scenarios (Fri 18:10 peak, Sat 22:45 near an event, Tue 14:00 quiet) with example quotes clearly marked "example" | P0 |
+| FR8 | Presenter route `/demo` (`GET /api/demo`): Fri 18:10 jam (2× usual), Sat 19:30 near MAMAMOO, Sun 23:05 after Jeong Eunji in rain, Tue 14:00 quiet — example prices marked "contoh" | P0 |
 | FR9 | "Walk out of the zone" tip — only if `reports/event_effect.md` shows lower prices in neighbouring zones on event nights | P2 |
 | FR10 | "Use my location" one-shot geolocation for nearby events | P2 |
 
@@ -91,18 +95,24 @@ source (model metrics, user input, cited event page).
 | 06:00–08:30 | `submission-checker`; final test; submit | Rehearse ×3; final slides |
 
 ## 8. Demo script (2 minutes)
-1. Open the real Grab app (and inDrive) on stage; type the quotes into "Masukkan harga yang anda nampak".
-2. Forecast: chance of a ≥10% drop, best time, countdown, expected saving on *their* quote.
-3. Ranking of the quoted apps now vs at best time.
-4. Event radar: a real upcoming event (with source) near the pickup; learned effect if validated.
-5. Proof slide from `reports/metrics.md`: savings vs "book now" and "hour average" on held-out real data.
+1. Open the real Grab app (and inDrive) on stage; type Dari/Ke, the quotes and the usual price.
+2. Headline: "Peluang harga turun ≥10% jika tunggu 30 min: X% (biasa 12%)" + RM range per app.
+3. Event radar: a real event (with source) near the pickup.
+4. `/demo` jam scenario: 2× usual → odds ~4× usual; quiet scenario → odds below usual.
+5. Proof slide: calibration table + honest baselines + "what we tested and rejected" (trend, borough,
+   traffic, event transfer) — tested on 19M real rides, audited twice for leakage.
 
 ## 9. Cut list (in order)
-1. FR10 geolocation 2. FR9 walk-out tip 3. FR7 rain toggle 4. FR4 usual price
-5. Event effect number (keep the real event list)
+1. FR10 geolocation 2. FR9 walk-out tip 3. Route-based usual-price estimate (FR4 helper)
+4. FR7 rain toggle 5. "Kenapa mahal?" line. Never cut: odds headline, harga biasa, events, `/demo`.
 
 ## 10. Risks
-1. Signal is modest (simple model beats persistence by ~5% MAE at +30 min) → pitch savings honestly; Boston already rejected for no signal.
+1. **Realised (10 Oct):** after removing a noise leak found by the leakage audit, the model does not beat
+   the hour-of-day baseline on savings (+0.03% vs +0.29%); P(drop) AUC ≈ 0.59, well calibrated. Extra
+   inputs tested and rejected: second quote/trend (`reports/trend_experiment.md`), borough averaging
+   (`reports/borough_experiment.md`, AUC 0.88 on 23 events but no savings gain), traffic and "why is it
+   high" (`reports/traffic_experiment.md`). The waiting rule (`reports/decision.json`) is not validated →
+   the app leads with calibrated odds and says "book now".
 2. Few events in the data period → event effect may not validate → show events without numbers.
 3. Surge is hard to predict (a Chicago project reached ~25% precision) → probabilities and savings vs baselines.
 4. US patterns applied to KL → state it plainly; roadmap: users' typed quotes become Malaysian training data.

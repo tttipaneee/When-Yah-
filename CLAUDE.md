@@ -9,9 +9,10 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 
 ## What we're building
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
-drop if they wait. The user types the price(s) they see; **When Yah?** predicts how that price will
-change over the next 60 minutes and says **book now or wait (until when)**, which of their quoted apps
-is likely cheapest at the best time, and warns when a real event nearby is likely to push prices up.
+drop if they wait. The user types the price(s) they see and their usual price; **When Yah?** gives the
+**calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
+per quoted app, book now or wait (wait only if a tested rule passes — currently it doesn't), and real
+events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
 
 ## The evidence rule — never break it
 Every number shown in the app, README or slides must trace to **real data** or a **cited, dated source**.
@@ -68,13 +69,16 @@ Fill in as they're created; keep them working.
  "model_version": "lgbm_v1", "evidence": {"metrics": "reports/metrics.md"}}
 ```
 - **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
-  typical chance (training base rate), plus the p10–p90 range. `decision` stays but is almost always `book_now`
-  (see `reports/metrics.md`). `reasons[0]` states the odds in words.
+  typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
+- `decision` = `wait` (30 min) only if `reports/decision.json` has `validated: true` **and** the odds are ≥ k × usual;
+  currently not validated, so always `book_now` (reasons explain why).
+- `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
 - `GET /api/metrics` → contents of `reports/metrics.md` and `reports/event_effect.md` as JSON.
+- `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).
 Changing the contract: update this section and tell both teammates.
 
 ## Subagents (`.claude/agents/`)
