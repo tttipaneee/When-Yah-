@@ -69,6 +69,14 @@ export function runModel(inp: ModelInput): Promise<any> {
   return lastResult
 }
 
+/** Claude explains this forecast in plain words (server recomputes the forecast; answers with numbers not in it are rejected). */
+export function explainForecast(inp: ModelInput): Promise<{ ai: boolean; text: string | null; reason?: string }> {
+  return fetch("/api/explain", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestBody(inp)),
+  }).then((r) => (r.ok ? r.json() : { ai: false, text: null, reason: `server error ${r.status}` }))
+    .catch(() => ({ ai: false, text: null, reason: "API not reachable" }))
+}
+
 export const APP_ID_TO_NAME: Record<string, string> = { grab: "Grab", indrive: "inDrive", gvride: "GV Ride" }
 
 export interface RealEvent {

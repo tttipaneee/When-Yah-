@@ -4,7 +4,7 @@ import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { PLACE_LATLON, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
-import { runModel } from "./model";
+import { runModel, explainForecast } from "./model";
 
 export default function App() {
   useEffect(() => {
@@ -410,7 +410,7 @@ export default function App() {
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
-    renderChart();realOnly();
+    renderChart();realOnly();aiReset();
   }
   // Decision in RM for the cheapest app you typed (model % × your price); % only when no price is typed
   function decisionText(tung){
@@ -682,6 +682,18 @@ export default function App() {
     var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();
   });
   ptsShow();
+  /* ---------- AI explanation (Claude, checked against this forecast's numbers) ---------- */
+  var AI_KEY="";
+  function aiReset(){var k=routeKey()+JSON.stringify([state.quotes,state.usual]);if(k!==AI_KEY){AI_KEY=k;$("aiOut").innerHTML="";$("aiBtn").disabled=false}}
+  $("aiBtn").onclick=function(){
+    var btn=this;btn.disabled=true;$("aiOut").innerHTML='<div class="empty">Writing an explanation…</div>';
+    explainForecast({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
+      .then(function(r){
+        $("aiOut").innerHTML=r.ai&&r.text?'<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by Claude (AI) from this forecast only — every number was checked against the forecast.</div>'
+          :'<div class="why-src">AI explanation unavailable'+(r.reason?' ('+esc(r.reason)+')':'')+'. The summary above says the same thing.</div>';
+        btn.disabled=false;
+      });
+  };
   /* ---------- Proof screen: every number from /api/metrics (reports/) ---------- */
   var PROOF=null;
   function navHome(){document.querySelectorAll(".nav button").forEach(function(x){
@@ -886,6 +898,14 @@ export default function App() {
             <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(16,20,16,.15)" strokeWidth="10"/><circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="#101410" strokeWidth="10" strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="263.9"/></svg>
             <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">drop ≥10%<br />in 30 min</em></div></div>
           </div>
+        </section>
+
+        <section className="card ai-card" aria-live="polite">
+          <button className="ghost ai-btn" id="aiBtn" type="button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.6L18.5 9.5l-4.7 1.9L12 16l-1.8-4.6L5.5 9.5l4.7-1.9z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+            Explain this in plain words
+          </button>
+          <div id="aiOut"></div>
         </section>
 
         <section className="card" aria-labelledby="rt">

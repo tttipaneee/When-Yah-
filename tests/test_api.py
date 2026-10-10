@@ -246,3 +246,18 @@ def test_situation_and_urgency_follow_the_outputs():
     from api.forecast import event_effect
     if event_effect():
         assert d["situation"] == "event_exit" and d["urgency"] in ("urgent", "wait")
+
+
+def test_explain_rejects_invented_numbers_and_works_without_key(monkeypatch):
+    import api.explain as ex
+    from api.schemas import ForecastRequest
+    req = ForecastRequest(**{**BODY, "quotes": [{"app": "grab", "price_rm": 30.0}], "usual_price_rm": 20.0})
+    f = ex.facts(req)
+    assert "Grab" in f["your_prices"] and f["your_prices"]["Grab"] == "RM30.00"
+    lo_hi = f["likely_price_in_30_min"]["Grab"]
+    assert ex.unsupported_numbers(f"Your Grab RM30.00 will likely be {lo_hi} in 30 min.", f) == []
+    assert ex.unsupported_numbers("You could save RM7.77 if you wait.", f) == ["7.77"]
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(ex, "_ENV", "/nonexistent/.env")
+    r = client.post("/api/explain", json={**BODY, "quotes": [{"app": "grab", "price_rm": 30.0}]}).json()
+    assert r["ai"] is False and r["text"] is None
