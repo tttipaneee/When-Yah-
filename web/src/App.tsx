@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchCaseStudies, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -35,7 +35,7 @@ export default function App() {
   // Example event zone for the design prototype (hidden screens); no numbers — real events come from /api/events
   var fsOpener=null,resOpener=null,zoneOpener=null,zoneBox=null;
   var state={from:"Axiata Arena",to:"KL Sentral",active:"from",prevFrom:null,
-    quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null,toLatLon:null};
+    quotes:[{app:"Grab",price:0}],usual:0,rain:false,fromLatLon:null,toLatLon:null};  // no example prices: you type yours
 
   function $(id){return document.getElementById(id)}
   function rm(v){return "RM"+v.toFixed(2)}
@@ -286,7 +286,7 @@ export default function App() {
       return '<div class="qrow">'+
         '<div class="sel"><span class="av">'+esc(ini)+'</span><select id="app'+i+'" data-i="'+i+'" aria-label="E-hailing app '+(i+1)+'">'+opts+'</select>'+
         '<svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>'+
-        '<div class="amt"><span>RM</span><input id="price'+i+'" data-i="'+i+'" type="number" inputmode="decimal" min="0" step="0.5" value="'+q.price+'" aria-label="Price shown in '+esc(q.app)+'"></div>'+
+        '<div class="amt"><span>RM</span><input id="price'+i+'" data-i="'+i+'" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00" aria-label="Price shown in '+esc(q.app)+'"></div>'+
         (state.quotes.length>1?'<button class="x" type="button" data-rm="'+i+'" aria-label="Remove '+esc(q.app)+'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>':'')+
       '</div>';
     }).join("");
@@ -306,12 +306,12 @@ export default function App() {
     state.quotes.splice(+b.dataset.rm,1);renderQuotes();renderPrediction();
   });
   $("usual").addEventListener("input",function(){var v=parseFloat(this.value);state.usual=isFinite(v)&&v>0?v:0;renderPrediction()});
-  $("rain").addEventListener("change",function(){state.rain=this.checked;renderPrediction()});
   $("addApp").onclick=function(){
     var used=state.quotes.map(function(q){return q.app});
     var next=APPS.filter(function(a){return used.indexOf(a)<0})[0];
     if(!next)return;
-    state.quotes.push({app:next,price:26});renderQuotes();renderPrediction();
+    state.quotes.push({app:next,price:0});renderQuotes();renderPrediction();
+    var inp=$("price"+(state.quotes.length-1));if(inp)inp.focus();
   };
 
   /* ---------- prediction ---------- */
@@ -376,7 +376,7 @@ export default function App() {
       if(/^Your quote is/.test(t))return row("tag","Your price",t);
       if(/^Why so pricey\?/.test(t))return row("tag","Why so pricey?",t.replace(/^Why so pricey\? /,""));
       if(/^No usual price/.test(t))return row("tag","No usual price",t.replace(/^No usual price given: /,"Without it, "));
-      if(t==="rain"||t==="no rain")return row("rain","Weather",t==="rain"?"Raining (you set Rain on)":"No rain");
+      if(t==="rain"||t==="no rain")return "";  // no rain input in the app any more
       if(/^Event ending right here: /.test(t))return row("cal","Event ending",t.replace(/^Event ending right here: /,""));
       return row("info","Note",t);
     }).join("");
@@ -387,10 +387,8 @@ export default function App() {
     $("why").innerHTML=html;
     renderFareReport();
   }
-  var DEFAULT_QUOTES=JSON.stringify(state.quotes);
   function renderPrediction(fromModel){
     if(!fromModel)requestModel();
-    if($("exTag"))$("exTag").hidden=JSON.stringify(state.quotes)!==DEFAULT_QUOTES;  // "Example prices" until you type yours
     renderRadar();  // pickup may have changed
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
@@ -400,9 +398,7 @@ export default function App() {
     var URG={urgent:"Urgent: book soon",wait:"Worth waiting",no_gain:"No gain from waiting"};
     $("dChips").innerHTML=MODEL&&MODEL.situation?'<span class="chip sit">'+esc(SIT[MODEL.situation]||"")+'</span><span class="chip urg '+esc(MODEL.urgency)+'">'+esc(URG[MODEL.urgency]||"")+'</span>':"";
     var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
-    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
-      tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Wait \d+ min: /,""))+".":
-      "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
+    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):decisionText(tung);
     $("rt").textContent=bestMin===0?"Your apps now":"Your apps: now vs "+hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";
     $("ringArc").style.strokeDashoffset=String(263.9*(1-PDROP));
@@ -415,6 +411,25 @@ export default function App() {
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
     renderChart();realOnly();
+  }
+  // Decision in RM for the cheapest app you typed (model % × your price); % only when no price is typed
+  function decisionText(tung){
+    var ID={Grab:"grab",inDrive:"indrive","GV Ride":"gvride"},o=MODEL.wait_odds;
+    var q=state.quotes.filter(function(x){return x.price>0&&ID[x.app]}).sort(function(a,b){return a.price-b.price})[0];
+    var pct=function(v){return Math.abs(Math.round(v*100))+"%"},ch=Math.round(o.p_save10*100),us=Math.round(o.typical_p_save10*100);
+    if(MODEL.decision==="wait"){
+      var h=MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0],m=MODEL.wait_minutes;
+      var cost=(tung||"").match(/(\d+)% of waits cost more/);
+      var odds=Math.round(h.p_drop10*100)+"% chance it gets 10%+ cheaper by then";
+      return (q?"Wait "+m+" min: your "+q.app+" "+rm(q.price)+" is expected around "+rm(q.price*(1+h.pct_change))+
+        " (could be "+rm(q.price*(1+h.pct_low))+" to "+rm(q.price*(1+h.pct_high))+"). ":"Wait "+m+" min: expected "+(h.pct_change<0?pct(h.pct_change)+" cheaper":"about the same")+". ")+
+        odds.charAt(0).toUpperCase()+odds.slice(1)+"."+(cost?" In our tests, "+cost[1]+"% of waits still cost more.":"");
+    }
+    var range=q&&o.rm_range[ID[q.app]],dir=function(v){return pct(v)+(v<0?" cheaper":" pricier")};
+    var span="between "+dir(o.pct_low)+" and "+dir(o.pct_high);
+    return (range?"In 30 min your "+q.app+" "+rm(q.price)+" will likely be "+rm(range[0])+" to "+rm(range[1])+" ("+span+"). ":
+        "In 30 min the price will likely be "+span+". ")+
+      "Chance it gets 10%+ cheaper: "+ch+"% ("+(Math.abs(ch-us)<=2?"about the usual "+us+"%":ch>us?"above the usual "+us+"%":"below the usual "+us+"%")+").";
   }
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
@@ -436,14 +451,8 @@ export default function App() {
   }
   function evWhen(e){return klTime(e.start)+(e.end?"–"+klTime(e.end):" (end not published)")}
   function renderRadar(){
-    var near=nearEvents(),t=$("radarText"),g=$("radarTag");
-    if(!t)return;
-    if(!EVENTS_LOADED){t.textContent="Loading real events…";return}
-    if(near.length){
-      var e=near[0];
-      t.textContent=(e.km<=HERE_KM?"Right here: ":"In the area: ")+e.name+" · "+e.venue+" · "+evWhen(e)+" · "+e.km.toFixed(1)+" km from your pickup"+(near.length>1?" (+"+(near.length-1)+" more)":"");
-    }else t.textContent=REAL_EVENTS.length?"No events within "+NEAR_KM+" km of your pickup today · "+REAL_EVENTS.length+" in Klang Valley":"No events listed for today";
-    if(g)g.textContent=REAL_EVENTS.length?REAL_EVENTS.length+" today":"Today";
+    // the home Event radar card was removed; events show on the map chip, the map circles and in "Why"
+    var near=nearEvents();
     $("chipText").textContent=near.length?(near[0].km<=HERE_KM?"Event right here · ":"Event in the area · ")+near[0].name:"Events today · "+REAL_EVENTS.length;
   }
   function renderZoneSheet(){
@@ -537,13 +546,11 @@ export default function App() {
     else if(g==="leaderboard")openLb();
     else if(g==="metrics")openProof();
   });
-  $("eventBtn").onclick=function(){openZone(this)};
 
   document.documentElement.setAttribute("lang","en");
   $("chipText").textContent="Events today";
   fetchEventsToday().then(function(ev){REAL_EVENTS=ev||[];EVENTS_LOADED=true;renderRadar();drawMain(false);drawBig()})
     .catch(function(){EVENTS_LOADED=true;renderRadar()});
-  fetchCaseStudies().then(renderStudies);
   /* ---------- "Booked? Tell us what you paid" (localStorage only; never sent) ---------- */
   var FARE_KEY="", FARE_STORE="whenyah.fares";
   var APP_NAME={grab:"Grab",indrive:"inDrive",gvride:"GV Ride"};
@@ -620,8 +627,28 @@ export default function App() {
     rows.sort(function(a,b){return b.pts-a.pts||(a.me?-1:b.me?1:0)});  // ties: you first
     return rows;
   }
+  // drawn avatars (inline SVG, no network): skin, hair colour and style per example friend
+  var FACE={Aina:["#C68B59","#2B2B2B","hijab","#7FB069"],"Wei Jie":["#F1C9A5","#1E1E1E","short"],Priya:["#9C6644","#1B1B1B","long"],
+    Hafiz:["#B07A4F","#2A1E17","short"],"Mei Ling":["#F3D2B3","#3A2A20","bob"],Arjun:["#8D5B3A","#141414","curly"]};
+  function face(name){
+    var f=FACE[name];
+    if(!f)return '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="15" r="7" fill="#C4F135"/><path d="M7 36c1-8 6-12 13-12s12 4 13 12z" fill="#C4F135"/></svg>';
+    var skin=f[0],hair=f[1],st=f[2],back="",front="";
+    if(st==="long")back='<path d="M9 18c0-9 5-13 11-13s11 4 11 13v13H9z" fill="'+hair+'"/>';
+    if(st==="bob")back='<path d="M9 19c0-9 5-13 11-13s11 4 11 13v6H9z" fill="'+hair+'"/>';
+    if(st==="hijab")back='<path d="M7 22c0-10 6-16 13-16s13 6 13 16v16H7z" fill="'+f[3]+'"/>';
+    if(st==="short")front='<path d="M11 16c0-6 4-9 9-9s9 3 9 9c-3-3-6-4-9-4s-6 1-9 4z" fill="'+hair+'"/>';
+    if(st==="long"||st==="bob")front='<path d="M11 17c0-6 4-10 9-10s9 4 9 10c-2-4-6-5-9-5s-7 1-9 5z" fill="'+hair+'"/>';
+    if(st==="curly")front='<path d="M10 17c-1-5 2-9 5-9 1-2 4-3 6-2 3-1 6 1 7 4 2 1 3 4 2 7-2-3-5-4-10-4s-8 1-10 4z" fill="'+hair+'"/>';
+    if(st==="hijab")front='<path d="M10 20c0-7 4-11 10-11s10 4 10 11c-2-4-6-6-10-6s-8 2-10 6z" fill="'+f[3]+'"/>';
+    return '<svg viewBox="0 0 40 40" aria-hidden="true">'+back+
+      '<path d="M8 40c1-7 6-10 12-10s11 3 12 10z" fill="#fff" opacity=".9"/>'+
+      '<circle cx="20" cy="19" r="8.5" fill="'+skin+'"/>'+front+
+      '<circle cx="17" cy="19.5" r="1.1" fill="#101410"/><circle cx="23" cy="19.5" r="1.1" fill="#101410"/>'+
+      '<path d="M17.5 23.2c1.5 1.3 3.5 1.3 5 0" stroke="#101410" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>';
+  }
   function avatar(r,big){
-    return '<span class="lb-av'+(big?" big":"")+'" style="background:'+r.color+'">'+esc(r.me?"You":r.name.split(" ").map(function(w){return w[0]}).join(""))+'</span>';
+    return '<span class="lb-av'+(big?" big":"")+'" style="background:'+r.color+'" title="'+esc(r.name)+'">'+face(r.me?null:r.name)+'</span>';
   }
   function renderLb(){
     var rows=lbRows(LB_VIEW),i=rows.findIndex(function(r){return r.me}),me=rows[i],next=i>0?rows[i-1]:null;
@@ -681,28 +708,34 @@ export default function App() {
       '<text x="'+X(0.2)+'" y="'+Y(0.165)+'" font-size="9" fill="rgba(16,20,16,.6)">perfect line</text></svg>';
     // 2. waiting vs simple rules: mean saving on test days
     function pol(re){return (s.policies||[]).filter(function(p){return re.test(p.name)})[0]}
-    var rows=[["Book right away",pol(/^Book now/)],["Our Wait rule (usual price typed)",pol(/with_level, odds rule/)],
-      ["Our Wait rule (no usual price)",pol(/no_level, odds rule/)],["Simple time-of-day rule",pol(/^Hour-of-day/)]].filter(function(r){return r[1]});
+    // plain words: savings also shown as sen on an example RM20 ride (= % × RM20)
+    var sen=function(v,fare){var x=v*(fare||20);return x>=1?"RM"+x.toFixed(2):Math.round(x*100)+" sen"};
+    var inTen=function(v){return Math.round(v*10)+" in 10"};
+    var rows=[["Always book right away",pol(/^Book now/)],["Follow When Yah? (you typed a usual price)",pol(/with_level, odds rule/)],
+      ["Follow When Yah? (no usual price)",pol(/no_level, odds rule/)],["Simple rule: wait at quiet hours",pol(/^Hour-of-day/)]].filter(function(r){return r[1]});
     var big=Math.max.apply(0,rows.map(function(r){return r[1].saving}))||1;
     var bars='<div class="pbars">'+rows.map(function(r){var p=r[1];
-      return '<div class="pb"><div class="pb-top"><span>'+esc(r[0])+'</span><b>'+pc(p.saving)+'</b></div><div class="pb-track"><i style="width:'+Math.max(1,p.saving/big*100)+'%"></i></div>'+
-        (p.wait_rate?'<small>Waits '+pc(p.wait_rate,0).replace("+","")+' of the time · '+pc(p.waits_cost_more,0).replace("+","")+' of waits cost more</small>':'')+'</div>'}).join("")+'</div>';
+      return '<div class="pb"><div class="pb-top"><span>'+esc(r[0])+'</span><b>'+(p.saving?sen(p.saving):"RM0")+'</b></div><div class="pb-track"><i style="width:'+Math.max(1,p.saving/big*100)+'%"></i></div>'+
+        (p.wait_rate?'<small>Says wait '+inTen(p.wait_rate)+' times · '+inTen(p.waits_cost_more)+' waits still cost more</small>':'')+'</div>'}).join("")+'</div>';
     var hi=wl.level_ge_1_5;
-    var EXP={trend_experiment:"A second quote (price trend)",traffic_experiment:"Live traffic",extreme_experiment:"Fix for extreme prices",borough_experiment:"Area averages"};
-    var exps=[];Object.keys(d.experiments||{}).forEach(function(k){(d.experiments[k]||[]).forEach(function(t){
-      exps.push((EXP[k]?EXP[k]+": ":"")+t.replace(/\*\*/g,"").replace(/^Result( [AB])?: /,""))})});
+    var EXP={trend_experiment:["Checking the price twice (a few minutes apart)","didn't make the forecast better"],
+      traffic_experiment:["Live traffic","doesn't predict the price (we still use it to warn you about jams)"],
+      extreme_experiment:["A fix for very high prices","kept — chances for very high prices got slightly more accurate"]};
+    var exps=Object.keys(EXP).filter(function(k){return (d.experiments||{})[k]&&d.experiments[k].length}).map(function(k){return '<b>'+EXP[k][0]+'</b> — '+EXP[k][1]});
     var fc=d.fare_check&&d.fare_check.methods&&d.fare_check.methods.tomtom;
+    if(fc)exps.push('<b>Guessing your usual price from the route</b> — off by '+pc(fc.median_abs_error,0).replace("+","")+' on '+fc.n_quotes+' real Grab trips, so we ask you instead');
     var card=function(h,body){return '<section class="card"><h2>'+h+'</h2>'+body+'</section>'};
     el.innerHTML=
-      card("Are the odds honest?",calSvg+'<p class="sub">Each dot is a tenth of '+s.test_windows.toLocaleString()+' test cases. On the line = the chance we gave is what happened. Highest group: we said '+
-        pc(top.mean_predicted,1).replace("+","")+', it happened '+pc(top.observed,1).replace("+","")+'.</p>')+
-      card("Does waiting pay?",bars+'<p class="sub">Average saving vs booking right away, on held-out test days. Our rule beats booking right away, but a simple time-of-day rule saves slightly more — we say so. When our rule says wait it saves '+
-        pc(wl.saving_when_wait)+' on average.</p>')+
-      (hi?card("When the price is already high",'<p class="sub">At 1.5× usual or more ('+hi.windows+' test cases) waiting saved <b>'+pc(hi.saving,1)+'</b> on average; the time-of-day rule '+pc(hi.hour_of_day_saving,1)+' and always waiting 30 min '+pc(hi.always_wait_30_saving,1)+'. High prices settle back down — this is where waiting pays.</p>'):"")+
-      card("How sharp is the timing?",'<p class="sub">Telling good from bad moments to wait: <b>'+(s.auc_drop10_30.with_level||0).toFixed(2)+'</b> (0.50 = coin flip, 1.00 = perfect). Modest — so we show odds and ranges, not promises.</p>')+
-      card("Other things we tested",'<ul class="plist2">'+exps.map(function(t){return '<li>'+esc(t)+'</li>'}).join("")+
-        (fc?'<li>Usual price from the route: median error '+pc(fc.median_abs_error,0).replace("+","")+' on '+fc.n_quotes+' real Grab quotes; our bar is 15% → kept off, you type it.</li>':"")+'</ul>')+
-      '<p class="why-src">Test days held out ('+esc(s.test_days)+'). Rule changes made after seeing test results are listed in reports/metrics.md. Calibration shown is before the 10 Oct cap.</p>';
+      '<p class="proof-intro">We tested When Yah? on '+s.test_windows.toLocaleString()+' real moments from ride-hailing data that the model had never seen. Here is what we found — the good and the bad.</p>'+
+      card("1. Can you trust our chances?",calSvg+'<p class="sub">Each dot is a group of past moments. When we said a '+pc(top.mean_predicted,0).replace("+","")+' chance of a 10%+ drop, it really happened '+
+        pc(top.observed,0).replace("+","")+' of the time. Dots on the dashed line = our chances were right.</p>')+
+      card("2. Does following the advice save money?",bars+'<p class="sub">Average saving per ride, shown on an example RM20 ride. Yes, a little: following When Yah? beats booking right away. '+
+        'But a simple "wait at quiet hours" rule saves slightly more — we say that openly. When we do say wait, you save about '+sen(wl.saving_when_wait)+' on RM20.</p>')+
+      (hi?card("3. Where it really helps: very high prices",'<p class="sub">When the price is already 1.5× normal or more, it usually comes back down. Waiting saved about <b>'+pc(hi.saving,0).replace("+","")+
+        '</b> — that\'s '+sen(hi.saving,30)+' on a RM30 surge fare. Simply waiting 30 minutes does about as well, so the main value is telling you the price is high.</p>'):"")+
+      card("4. Can it pick the exact moment?",'<p class="sub">Only a little better than guessing (score '+(s.auc_drop10_30.with_level||0).toFixed(2)+', where 0.50 is a coin flip). That\'s why we show chances and price ranges, never promises.</p>')+
+      card("5. Ideas we tried",'<ul class="plist2">'+exps.map(function(t){return '<li>'+t+'</li>'}).join("")+'</ul>')+
+      '<p class="why-src">Test days held out ('+esc(s.test_days)+'). Full numbers and every rule change made after seeing results: reports/metrics.md. Chances shown are from before the 10 Oct calibration cap.</p>';
   }
   function fareThanks(f){
     var line=f.quoted!=null?"You saw "+rm(f.quoted)+" on "+APP_NAME[f.app]+" when you checked and paid "+rm(f.paid)+
@@ -710,54 +743,6 @@ export default function App() {
       :"You paid "+rm(f.paid)+" on "+APP_NAME[f.app]+".";
     var w=f.decision==="wait"&&f.expected_after_wait!=null?" The forecast expected about "+rm(f.expected_after_wait)+" after waiting "+f.wait_minutes+" min.":"";
     return '<div class="wrow ok"><span class="wic">'+ICON_CHECK+'</span><div><b>Thanks — saved</b><small>'+esc(line+w)+'</small></div><span></span></div>';
-  }
-  /* ---------- study cases (real ride data, reports/case_studies.md) ---------- */
-  function renderStudies(d){
-    var el=$("studies");if(!el)return;
-    if(!d||!d.event_exit||!d.surge_fallback){el.closest(".card").hidden=true;return}
-    var p=function(v){return (v>0?"+":"")+Math.round(v*100)+"%"};
-    // 1. event exit: learned curve (training games), minutes from the end
-    var e=d.event_exit,bins=Object.keys(e.learned_bins).map(Number).sort(function(a,b){return a-b});
-    var W=300,H=120,x=function(m){return 24+(m-bins[0])/(bins[bins.length-1]-bins[0])*(W-34)},y=function(v){return H-18-v/0.25*(H-40)};
-    var ev='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price vs a normal day around the end of an event">'+
-      '<line x1="'+x(0)+'" y1="6" x2="'+x(0)+'" y2="'+(H-18)+'" stroke="#101410" stroke-width="1"/>'+
-      '<text x="'+(x(0)+4)+'" y="'+(H-24)+'" font-size="9" fill="#101410">event ends</text>'+
-      '<line x1="24" y1="'+y(0)+'" x2="'+(W-10)+'" y2="'+y(0)+'" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
-      '<polyline points="'+bins.map(function(b){return x(b)+","+y(e.learned_bins[b])}).join(" ")+'" fill="none" stroke="#F26B1D" stroke-width="3" stroke-linejoin="round"/>'+
-      bins.map(function(b){return '<circle cx="'+x(b)+'" cy="'+y(e.learned_bins[b])+'" r="3" fill="#F26B1D"/>'}).join("")+
-      '<text x="'+(x(e.peak_window_min[0])+6)+'" y="'+(y(e.peak)-6)+'" font-size="10" font-weight="700" fill="#101410">'+p(e.peak)+'</text>'+
-      bins.filter(function(b){return b%30===0}).map(function(b){return '<text x="'+x(b)+'" y="'+(H-4)+'" font-size="9" fill="rgba(16,20,16,.6)" text-anchor="middle">'+(b>0?"+":"")+b+'</text>'}).join("")+
-      '</svg>';
-    // 2. high prices settle: actual vs model change at +30 min, by how high the price was
-    var rows=d.surge_fallback,bw=(W-40)/rows.length,y2=function(v){return 14+(-v)/0.12*(H-48)};
-    var sg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Price change 30 minutes later, by how high the price was">'+
-      '<line x1="20" y1="14" x2="'+(W-10)+'" y2="14" stroke="rgba(16,20,16,.25)" stroke-dasharray="3 3"/>'+
-      rows.map(function(r,i){var cx=24+i*bw,a=Math.min(0,r.actual["30"]),m=Math.min(0,r.model["30"]);
-        return '<rect x="'+(cx+4)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(a)-14)+'" fill="#F26B1D" rx="2"/>'+
-          '<rect x="'+(cx+bw/2)+'" y="14" width="'+(bw/2-6)+'" height="'+(y2(m)-14)+'" fill="#101410" opacity=".55" rx="2"/>'+
-          '<text x="'+(cx+bw/2)+'" y="'+(Math.max(y2(a),y2(m))+11)+'" font-size="9" fill="#101410" text-anchor="middle">'+p(r.actual["30"])+'</text>'+
-          '<text x="'+(cx+bw/2)+'" y="'+(H-14)+'" font-size="9" fill="#101410" text-anchor="middle">'+esc(r.band.replace(/ \(.*\)/,""))+'</text><text x="'+(cx+bw/2)+'" y="'+(H-3)+'" font-size="8" fill="rgba(16,20,16,.55)" text-anchor="middle">'+r.n.toLocaleString()+' cases</text>'}).join("")+
-      '</svg>';
-    var hi=rows.filter(function(r){return r.band.indexOf("1.5")>=0&&r.band.indexOf("≥")===0})[0];
-    el.innerHTML=
-      '<div class="study"><h3>When a big event ends</h3>'+ev+
-      '<p class="sub">Right next to a baseball stadium, prices were <b>'+p(e.heldout_0_45)+'</b> vs a normal day in the 45 min after '+
-      e.heldout_games+' games the model never saw (learned from '+e.train_games+' games: '+p(e.learned_0_45)+'). Peak right after the end.</p></div>'+
-      (hi?'<div class="study"><h3>When the price is already high</h3>'+sg+
-      '<div class="legend"><span><i style="width:10px;height:10px;background:#F26B1D;border-radius:2px"></i>Actual, 30 min later</span><span><i style="width:10px;height:10px;background:#101410;opacity:.55;border-radius:2px"></i>Model said</span></div>'+
-      '<p class="sub">At '+esc(hi.band)+' normal, prices fell <b>'+Math.round(-hi.actual["30"]*100)+'%</b> in 30 min on average; a ≥10% drop happened '+
-      Math.round(hi.drop10_actual_30*100)+'% of the time (model said '+Math.round(hi.drop10_model_30*100)+'%). High prices settle back down — a simple time-of-day rule catches this too.</p></div>':'')+
-      '<div class="study"><h3>When a jam is coming</h3><p class="sub">With pickup and destination set, we check predicted trip time for leaving now vs in 15–60 min. '+
-      'If the trip gets 25% longer, waiting is off: <b>Book now — jam coming</b>. Traffic did not help predict the price itself, so we show minutes, not a %.</p></div>'+
-      '<div class="why-src">Measured on real ride-hailing data (2024), test days held out — not measured in Malaysia. Source: reports/case_studies.md</div>';
-    // one moment at a time: tabs instead of one long card
-    var st=el.querySelectorAll(".study"),names=["Event ends","Price high","Jam coming"];
-    var tabs=document.createElement("div");tabs.className="lb-toggle three";tabs.setAttribute("role","tablist");
-    tabs.innerHTML=[].map.call(st,function(s,i){return '<button type="button" role="tab" data-i="'+i+'" aria-selected="'+(i===0)+'">'+names[i]+'</button>'}).join("");
-    el.insertBefore(tabs,el.firstChild);
-    function show(k){[].forEach.call(st,function(s,i){s.hidden=i!==k});[].forEach.call(tabs.children,function(b,i){b.setAttribute("aria-selected",String(i===k))})}
-    tabs.onclick=function(e){var b=e.target.closest("button[data-i]");if(b)show(+b.dataset.i)};
-    show(0);
   }
   initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
@@ -826,15 +811,14 @@ export default function App() {
               <h2 id="qt">Enter the prices you see</h2>
               <p className="sub">Type the price each app shows you right now.</p>
             </div>
-            <span className="tag" id="exTag">Example prices</span>
           </div>
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
-          <div className="qrow">
-            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Usual price" aria-label="Usual price for this trip (optional)" /></div>
-            <label className="ghost"><input id="rain" type="checkbox" /> Rain</label>
-          </div>
-          <p className="note">Know your usual price for this trip? Add it for a sharper forecast.</p>
+          <label className="usual-box" htmlFor="usual">
+            <span className="usual-top"><b>What do you usually pay for this trip?</b><em>Optional</em></span>
+            <span className="usual-in"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="e.g. 18" /></span>
+            <small>On a normal, quiet day. With it we can tell if today's price is already high, and the advice gets sharper.</small>
+          </label>
           <div className="row-actions">
             <button className="ghost" id="addApp" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
@@ -846,22 +830,12 @@ export default function App() {
           </div>
         </section>
 
-        <section aria-label="Events near pickup" id="events">
-          <button className="event" type="button" id="eventBtn">
-            <span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
-            <span><b>Event radar</b><small id="radarText">Loading real events…</small></span>
-            <span className="tag" id="radarTag">Today</span>
-          </button>
-        </section>
       </div>
     </main>
 
     <nav className="nav" aria-label="Main">
       <button type="button" data-go="top" aria-current="page" aria-label="Home">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg>
-      </button>
-            <button type="button" data-go="events" aria-label="Events">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
       </button>
       <button type="button" data-go="leaderboard" aria-label="Leaderboard">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
@@ -944,13 +918,6 @@ export default function App() {
             <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved on this phone only. Real fares like yours are how the forecast gets checked in Malaysia.</p></div>
           </div>
           <div id="fareReport"></div>
-        </section>
-
-        <section className="card" aria-labelledby="st">
-          <div className="card-head">
-            <div><h2 id="st">What we saw in real ride data</h2><p className="sub">Three moments when prices move, measured on real trips.</p></div>
-          </div>
-          <div id="studies"></div>
         </section>
 
         <p className="foot">Trained and tested on 19M real ride-hailing trips (NYC TLC Uber/Lyft records, Aug 2024), applied to your typed prices and local KL time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
