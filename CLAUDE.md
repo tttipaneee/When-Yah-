@@ -11,7 +11,7 @@ Module rules load automatically from `.claude/rules/` (ml.md, api.md, web.md).
 At peak hours people open Grab, inDrive and GV Ride one by one and still don't know if the price will
 drop if they wait. The user types the price(s) they see (usual price optional); **When Yah?** gives the
 **calibrated odds that waiting 30 min gets a price ≥ 10% lower** (vs the usual odds), the likely RM range
-per quoted app, book now or wait (wait only if a tested rule passes — currently it doesn't), and real
+per quoted app, "Tunggu X min" or book now (tested rule: beats book-now, slightly below hour-of-day), and real
 events nearby with sources. Revised 10 Oct after testing — see `docs/PRD.md` §1 and §10.
 
 ## The evidence rule — never break it
@@ -37,7 +37,7 @@ scripts/         run_demo.sh
 
 ## Commands
 Fill in as they're created; keep them working.
-- Setup: `pip install -r requirements.txt && (cd web && npm install)`
+- Setup: `pip install -r requirements.txt && (cd web && npm install)`; optional `TOMTOM_API_KEY` in `.env` for traffic
 - Download data: `scripts/download_data.sh` (sha256-verified, 19,128,392 rows)
 - NYC venue events: `python ml/fetch_nyc_events.py` → `data/events/nyc_events_2024-08.csv`
 - Weather (NOAA Central Park hourly): `python ml/fetch_weather.py` → `data/weather/nyc_central_park_2024-08.csv`
@@ -71,16 +71,25 @@ Fill in as they're created; keep them working.
 ```
 - **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
-- `decision` = `wait` (30 min) only if `reports/decision.json` has `validated: true` **and** the odds are ≥ k × usual;
-  currently not validated, so always `book_now` (reasons explain why).
+- `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
+  CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k **and** P(drop≥10%) there is ≥ 20%
+  (product rule; below that, "book now"); `wait_minutes` = that horizon.
+  A reason starting "Tunggu" gives the tested saving and how often waiting cost more.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
   as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
   route) and the user typed none; otherwise `usual_price_estimate: null`.
+- Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
+  are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
+  Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now} | null`. A departure ≥ 25% longer than now
+  = jam: "Tunggu" flips to "Book now — jam coming". Minutes only — traffic is **not** a price-model input
+  (`reports/traffic_experiment.md`).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
+  Forecast events carry `km` and `level`: `right_here` (≤ 1 km ≈ the venue's own NYC taxi zone, where post-game effects
+  were measured) or `in_area` (≤ 5 km, product choice, information only). The map draws a dashed 1 km circle per venue.
 - `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
   calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).

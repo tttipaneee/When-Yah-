@@ -16,11 +16,12 @@ from statistics import median
 import joblib
 from fastapi import HTTPException
 
-from api.events import events_near
+from api.events import events_near, haversine_km
 from api.fare import estimate as fare_estimate
-from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, WaitOdds
+from api.traffic import predicted_minutes
+from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
-from ml.train import drop_prob
+from ml.train import MIN_WAIT_P, drop_prob
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = ROOT / "ml" / "models" / "lgbm_v1.joblib"
@@ -49,9 +50,9 @@ DECISION = ROOT / "reports" / "decision.json"
 
 
 def decision_rule() -> dict:
-    """Written by ml/evaluate.py: did the "Tunggu" odds rule beat book-now and hour-of-day on test days?"""
+    """Written by ml/evaluate.py: per variant, did the "Tunggu" rule beat book-now on held-out test days?"""
     if not DECISION.exists():
-        return {"validated": False}
+        return {}
     return json.loads(DECISION.read_text(encoding="utf-8"))
 
 
@@ -79,6 +80,8 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
+HERE_KM = 1.0  # "right here": about the venue's own NYC taxi zone (~0.75-1.3 km), where the effect was measured
+JAM_FACTOR = 1.25  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
 def forecast(req: ForecastRequest) -> ForecastResponse:
@@ -110,19 +113,51 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})
-    # "Tunggu" = odds rule (wait 30 min when P(drop >= 10%) >= k x usual), served only if
-    # reports/decision.json says it beat both baselines on held-out data; otherwise always book now.
-    dec = decision_rule()
+    # "Tunggu" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
+    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (20%, product rule)
+    # — only if that rule beat "book now" on held-out days.
+    gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
-    odds_high = k is not None and odds.p_save10 >= k * odds.typical_p_save10
-    wait = bool(dec["validated"]) and variant == "with_level" and odds_high  # only with_level is tested
-    best = h30
-    wait_minutes = 30 if wait else 0
+    base = load_bundle()["base_rate"]
+    mults = {h.minutes: h.p_drop10 / base[h.minutes] for h in horizon}
+    best = max(horizon, key=lambda h: mults[h.minutes])
+    odds_high = k is not None and mults[best.minutes] >= k and best.p_drop10 >= MIN_WAIT_P
+    wait = bool(gate.get("validated")) and odds_high
+    # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
+    # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
+    # if waiting puts the trip in much heavier traffic, don't advise waiting.
+    traffic, traffic_reason = None, None
+    src = "traffic prediction sent by the app"
+    raw_tm = req.traffic_min
+    if raw_tm is None and req.pickup and req.dropoff:
+        raw_tm = predicted_minutes((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon), req.datetime)
+        src = "TomTom traffic prediction"
+    tm = {int(k_): float(v_) for k_, v_ in (raw_tm or {}).items() if v_ and v_ > 0}
+    if 0 in tm and len(tm) > 1:
+        now_min = tm[0]
+        worst = max((m for m in tm if m > 0), key=lambda m: tm[m])
+        jam = tm[worst] >= JAM_FACTOR * now_min
+        flipped = False
+        at = lambda m: (req.datetime + timedelta(minutes=m)).strftime("%H:%M")
+        if wait and tm.get(best.minutes, 0) >= JAM_FACTOR * now_min:
+            wait, flipped = False, True
+            traffic_reason = (f"Book now — jam coming: trip {now_min:.0f} min if you leave at {at(0)} vs "
+                              f"{tm[best.minutes]:.0f} min at {at(best.minutes)} ({src})")
+        elif jam:
+            traffic_reason = (f"Traffic predicted to build: trip {now_min:.0f} min at {at(0)}, {tm[worst]:.0f} min if you "
+                              f"leave at {at(worst)} ({src})")
+        else:  # no jam: show the trip times as information
+            m_ = best.minutes if (wait and best.minutes in tm) else max(tm)
+            traffic_reason = (f"Traffic: trip {now_min:.0f} min if you leave at {at(0)}, {tm[m_]:.0f} min at "
+                              f"{at(m_)} ({src}) — no jam predicted")
+        traffic = TrafficInfo(source=src, minutes=tm, jam_ahead=jam,
+                              flipped_to_book_now=flipped)
+    wait_minutes = best.minutes if wait else 0
     saving, risk = {}, {}
     if wait:
-        saving = {a: round(rm * max(-h30.pct_change, 0), 2) for a, rm in quotes.items()}
-        risk = {a: round(rm * max(h30.pct_high, 0), 2) for a, rm in quotes.items()}
-    at_best = h30.expected_rm if wait else quotes
+        saving = {a: round(rm * max(-best.pct_change, 0), 2) for a, rm in quotes.items()}
+        risk = {a: round(rm * max(best.pct_high, 0), 2) for a, rm in quotes.items()}
+    at_best = best.expected_rm if wait else quotes
 
     reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
                    f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
@@ -138,20 +173,43 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         reasons.append("No usual price given: the model can't tell if this price is already high, "
                        "so it only advises waiting when time-of-day patterns are clear")
     if wait:
-        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual — waiting 30 min "
-                       "is a reasonable bet (tested on held-out data, reports/metrics.md)")
+        surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
+        ev = (f"in NYC tests, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
+              f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well)"
+              if surge else f"in NYC tests, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
+              "on average (a simple time-of-day rule saved slightly more overall)")
+        reasons.append(f"Tunggu {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
+                       f"({mults[best.minutes]:.1f}x the usual); "
+                       f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
+    elif odds_high and traffic is not None and traffic.flipped_to_book_now:
+        pass  # the traffic reason explains the book-now
     elif odds_high:
-        reasons.append(f"Odds of a drop are {odds.p_save10 / odds.typical_p_save10:.1f}x the usual, but no waiting rule "
-                       "beat a simple time-of-day rule on held-out data, so we don't advise waiting")
+        reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
-        reasons.append("Odds of a drop are not above usual — book now")
+        rise = max(horizon, key=lambda h: h.pct_change)
+        if rise.pct_change >= 0.015:  # model expects the price to edge up (e.g. toward the evening peak)
+            reasons.append(f"Book now: the model expects the price to edge up by +{rise.minutes} min "
+                           f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
+                           "a time-of-day pattern learned from NYC data; it can't see live KL traffic")
+        else:
+            reasons.append(f"Book now: chance of a ≥10% drop is {best.p_drop10:.0%} at best (+{best.minutes} min), "
+                           f"under our {MIN_WAIT_P:.0%} minimum to advise waiting")
+    if traffic_reason:
+        reasons.append(traffic_reason)
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
-    events = [ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None) for e in nearby]
-    ev_reasons = [f"Event nearby: {e.name}" + (" — in New York data, prices near a baseball stadium rose right "
-                                              "after games; not measured for Malaysian events" if eff else
-                                              " (effect on price not validated)") for e in nearby]
+    pk = (req.pickup.lat, req.pickup.lon) if req.pickup else None
+    events, ev_reasons = [], []
+    for e in nearby:
+        km = round(haversine_km(pk[0], pk[1], e.lat, e.lon), 1) if pk else None
+        lvl = None if km is None else ("right_here" if km <= HERE_KM else "in_area")
+        events.append(ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None, km=km, level=lvl))
+        where = (f"Event right here ({km:.1f} km)" if lvl == "right_here" else
+                 f"Event in the area ({km:.1f} km)" if lvl else "Event today")
+        ev_reasons.append(f"{where}: {e.name}" + (
+            " — in New York data, prices in a stadium's own area (~1 km) rose right after games; not measured for "
+            "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))
     reasons += ev_reasons
     reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
     return ForecastResponse(
@@ -161,6 +219,6 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         apps_ranked_now=_rank(quotes), apps_ranked_best_time=_rank(at_best),
         events=events, reasons=reasons,
         model_version=f"lgbm_v1/{variant}",
-        usual_price_estimate=est,
+        usual_price_estimate=est, traffic=traffic,
         evidence={"metrics": "reports/metrics.md", "event_effect": "reports/event_effect.md"},
     )

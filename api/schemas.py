@@ -24,6 +24,9 @@ class ForecastRequest(BaseModel):
     quotes: list[Quote] = []
     usual_price_rm: float | None = Field(default=None, gt=0)
     dropoff: LatLon | None = None  # with pickup: route-based usual-price estimate (only if fare check passed)
+    # predicted trip minutes if leaving now / in 15 / 30 / 45 / 60 min (e.g. a traffic prediction sent by
+    # the frontend); keys are minutes from now. Used for traffic warnings, not for the price odds.
+    traffic_min: dict[int, float] | None = None
 
 
 class HorizonPoint(BaseModel):
@@ -44,6 +47,8 @@ class ForecastEvent(BaseModel):
     name: str
     source_url: str
     learned_effect: LearnedEffect | None = None
+    km: float | None = None        # distance from the pickup
+    level: str | None = None       # "right_here" (<= 1 km) | "in_area" (<= 5 km)
 
 
 class WaitOdds(BaseModel):
@@ -63,6 +68,13 @@ class UsualPriceEstimate(BaseModel):
     source: str
 
 
+class TrafficInfo(BaseModel):
+    source: str
+    minutes: dict[int, float]
+    jam_ahead: bool          # some departure in the next 60 min is >= 25% longer than leaving now
+    flipped_to_book_now: bool
+
+
 class ForecastResponse(BaseModel):
     datetime: datetime
     horizon: list[HorizonPoint]
@@ -78,6 +90,7 @@ class ForecastResponse(BaseModel):
     reasons: list[str]
     model_version: str
     usual_price_estimate: UsualPriceEstimate | None = None  # null unless reports/fare_check.json passed
+    traffic: TrafficInfo | None = None  # only when the request carried traffic_min
     evidence: dict[str, str]
 
 

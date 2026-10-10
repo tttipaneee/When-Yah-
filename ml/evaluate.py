@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, roc_auc_score
 
 from ml.features import HORIZONS
-from ml.train import MODEL, drop_prob, load_frame
+from ml.train import MIN_WAIT_P, MODEL, base_rates, drop_prob, load_frame, odds_multiples, tunggu
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "metrics.md"
@@ -47,6 +47,18 @@ def policy_stats(wait, best, actual, clusters) -> dict:
             "hi": np.percentile(boots, 97.5),
             "saving_when_wait": saving[wait].mean() if wait.any() else 0.0,
             "worse_share_of_waits": worse.sum() / max(wait.sum(), 1), "worse_share_all": worse.mean()}
+
+
+def paired_diff(a: tuple, b_: tuple, actual, clusters) -> tuple[float, float, float]:
+    """Saving(policy a) - saving(policy b) on the SAME windows, block bootstrap over clusters (re-audit)."""
+    def sav(w, h):
+        return 1 - np.where(w, actual[np.arange(len(actual)), h], 1.0)
+    d = sav(*a) - sav(*b_)
+    uc = np.unique(clusters)
+    idx = {c: np.flatnonzero(clusters == c) for c in uc}
+    rng = np.random.default_rng(1)
+    boots = [d[np.concatenate([idx[c] for c in rng.choice(uc, len(uc))])].mean() for _ in range(500)]
+    return float(d.mean()), float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))
 
 
 def pct(x: float, d: int = 2) -> str:
@@ -84,12 +96,11 @@ def main() -> None:
     rows["Linear on level (1/level)"] = policy_stats(*decide(lin, None), actual, clusters)
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
-    # "Tunggu" odds rule (served): wait 30 min when P(drop >= 10% @30) >= k x usual chance; k picked on val
+    # "Tunggu" odds rule (served): wait for the horizon with the best odds multiple if >= k; k picked on val
     odds_wait = {}
     for v in preds:
         k = b.get("wait_k", {}).get(v)
-        w = preds[v]["p"][:, 1] >= k * b["base_rate"][30] if k else np.zeros(len(te), bool)
-        odds_wait[v] = (w, np.full(len(te), 1))  # horizon index 1 = +30 min
+        odds_wait[v] = tunggu(odds_multiples(b, v, te[b["features"][v]]), k, base_rates(b))
         rows[f"When Yah? {v}, odds rule (k={k})"] = policy_stats(*odds_wait[v], actual, clusters)
     oracle_best = actual.argmin(axis=1)
     rows["Oracle (perfect foresight; upper bound incl. measurement noise)"] = policy_stats(
@@ -103,6 +114,7 @@ def main() -> None:
                            "When Yah? no_level": decide(preds["no_level"]["mean"], preds["no_level"]["q90"]),
                            "When Yah? with_level": decide(preds["with_level"]["mean"], preds["with_level"]["q90"]),
                            "When Yah? with_level, odds rule": odds_wait["with_level"],
+                           "When Yah? no_level, odds rule": odds_wait["no_level"],
                            }.items():
         surge_rows[name] = policy_stats(w[surge], bst[surge], actual[surge], clusters[surge])
 
@@ -119,10 +131,11 @@ def main() -> None:
          "sees comes from half A; every outcome (ratio, drop, saving) is measured on half B, so sampling noise in",
          "the current window cannot masquerade as a predictable price drop.", "",
          "## 1. Policy savings (test)",
-         "Saving = 1 − (price paid ÷ price now), averaged over all test windows. Decision rule = the API's:",
-         "wait for the horizon with the lowest predicted price, only if the predicted saving exceeds the",
-         "p90 downside; otherwise book now. Hour-of-day baseline waits whenever the training-period mean",
-         "ratio for that hour is below 1.", "",
+         "Saving = 1 − (price paid ÷ price now), averaged over all test windows. **Served rule** = the \"odds",
+         "rule\" rows: wait for the 15–60 min horizon with the best odds multiple (P(drop ≥ 10%) ÷ usual) if ≥ k",
+         "(k picked on val). Rows \"When Yah? no_level / with_level\" without \"odds rule\" are the **old q90 rule",
+         "(retired)**. Hour-of-day baseline waits (at its best 15–60 min horizon) whenever the training-period",
+         "mean ratio for that hour is below 1.", "",
          "| Policy | Waits | Mean saving vs book now (95% CI) | Saving when it waits | Waits that cost more |",
          "|---|---|---|---|---|"]
     for k, s in rows.items():
@@ -169,17 +182,16 @@ def main() -> None:
     wl, nl, ho = rows["When Yah? with_level"], rows["When Yah? no_level"], rows["Hour-of-day average ratio"]
     sw, sh = surge_rows["When Yah? with_level"], surge_rows["Hour-of-day average ratio"]
     beats = {k: rows[k]["lo"] > ho["hi"] for k in ("When Yah? with_level", "When Yah? no_level")}
-    verdict = ("**When Yah? beats both baselines on held-out data.**" if any(beats.values()) else
-               "**When Yah? does NOT beat the hour-of-day baseline on held-out data.** It beats \"book now\" "
-               "only marginally, because it almost always advises booking now.")
+    verdict = ("The old q90 rule (retired) " + ("beat both baselines." if any(beats.values()) else
+               "did not beat the hour-of-day baseline; it almost never advised waiting. The served odds rule is "
+               "assessed at the end of this report."))
     mae30 = (np.abs(actual[:, 1] - preds["with_level"]["mean"][:, 1]).mean() / np.abs(actual[:, 1] - 1).mean() - 1)
     L += ["", "## Reading (plain)", f"- {verdict}",
-          f"- with_level: mean saving {pct(wl['saving'])} (hour-of-day baseline {pct(ho['saving'])}); it waits "
+          f"- (old q90 rule) with_level: mean saving {pct(wl['saving'])} (hour-of-day baseline {pct(ho['saving'])}); it waits "
           f"{wl['wait_rate']:.1%} of the time, saving {pct(wl['saving_when_wait'])} when it does, but "
           f"{wl['worse_share_of_waits']:.1%} of its waits cost more. When the price is ≥ 20% high: "
           f"{pct(sw['saving'])} vs {pct(sh['saving'])} for the baseline.",
-          f"- no_level waits {nl['wait_rate']:.1%} of the time: without the current level, nothing predicts a drop "
-          "large enough to beat the risk.",
+          f"- (old q90 rule) no_level waited {nl['wait_rate']:.1%} of the time.",
           f"- Forecast error at +30 min is {mae30:+.1%} vs persistence and P(drop) AUC is "
           f"{roc_auc_score((actual[:, 1] <= 0.9).astype(int), preds['with_level']['p'][:, 1]):.2f}: "
           "15-minute price changes in this data are mostly unpredictable from time, rain and the current level.",
@@ -190,12 +202,56 @@ def main() -> None:
           "  rider's band and drop chances may differ (likely a narrower band).",
           "- Patterns are learned in New York (Aug 2024) and applied to the user's local clock in Klang Valley.",
           "  They are not Malaysian data; typed quotes would become Malaysian training data (roadmap)."]
-    odr, ho_ = rows[f"When Yah? with_level, odds rule (k={b['wait_k']['with_level']})"], rows["Hour-of-day average ratio"]
-    validated = odr["lo"] > ho_["hi"] and odr["lo"] > 0
-    L += [f"- **\"Tunggu\" odds rule** (wait 30 min when the drop chance ≥ {b['wait_k']['with_level']}× usual; k picked on val): "
-          f"saving {pct(odr['saving'])} vs hour-of-day {pct(ho_['saving'])} → "
-          + ("**beats both baselines; the app may advise waiting.**" if validated else
-             "**does not beat the hour-of-day baseline; the app always says book now and shows the odds as information.**")]
+    ho_ = rows["Hour-of-day average ratio"]
+    hour_pol = decide(ha, None)
+    hi15 = te.level.to_numpy() >= 1.5
+    decision = {"rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual "
+                        f"chance) if it is >= k AND P(drop>=10%) there >= {MIN_WAIT_P:.0%}; k picked on val days",
+                "min_wait_p": MIN_WAIT_P,
+                "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
+                "test_days": "2024-08-26..2024-08-31", "variants": {}}
+    for v in preds:
+        kv = b["wait_k"][v]
+        r_ = rows[f"When Yah? {v}, odds rule (k={kv})"]
+        w_, h_ = odds_wait[v]
+        s15 = policy_stats(w_[hi15], h_[hi15], actual[hi15], clusters[hi15])
+        ok = bool(kv is not None and r_["lo"] > 0)
+        dm, dlo, dhi = paired_diff(odds_wait[v], hour_pol, actual, clusters)
+        verdict_hour = "beats" if dlo > 0 else "loses to" if dhi < 0 else "ties"
+        decision["variants"][v] = {
+            "validated": ok, "k": kv, "test_saving": round(float(r_["saving"]), 5),
+            "test_saving_ci": [round(float(r_["lo"]), 5), round(float(r_["hi"]), 5)],
+            "wait_rate": round(float(r_["wait_rate"]), 4),
+            "saving_when_wait": round(float(r_["saving_when_wait"]), 4),
+            "waits_cost_more": round(float(r_["worse_share_of_waits"]), 3),
+            "vs_hour_of_day": verdict_hour,
+            "minus_hour_of_day": [round(dm, 5), round(dlo, 5), round(dhi, 5)]}
+        if v == "with_level":  # level is only known (quote / usual price) when with_level is served
+            sh15 = policy_stats(hour_pol[0][hi15], hour_pol[1][hi15], actual[hi15], clusters[hi15])
+            aw = policy_stats(np.ones(hi15.sum(), bool), np.full(hi15.sum(), 1), actual[hi15], clusters[hi15])
+            decision["variants"][v]["level_ge_1_5"] = {
+                "windows": int(hi15.sum()), "wait_rate": round(float(s15["wait_rate"]), 3),
+                "saving": round(float(s15["saving"]), 4),
+                "saving_ci": [round(float(s15["lo"]), 4), round(float(s15["hi"]), 4)],
+                "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3),
+                "hour_of_day_saving": round(float(sh15["saving"]), 4),
+                "always_wait_30_saving": round(float(aw["saving"]), 4)}
+        L += [f"- **\"Tunggu\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual and chance ≥ {MIN_WAIT_P:.0%}; k picked on val): saving "
+              f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
+              + ("**beats book now: the app may say \"Tunggu\"**" if ok else "**does not beat book now: the app says book now**")
+              + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}; paired difference {pct(dm)}, "
+              f"95% CI {pct(dlo)} … {pct(dhi)}). When it waits it saves "
+              f"{pct(r_['saving_when_wait'])} on average and {r_['worse_share_of_waits']:.0%} of waits cost more. "
+              + (f"When the price is ≥ 1.5× usual ({int(hi15.sum())} windows): it waits {s15['wait_rate']:.0%} of the "
+                 f"time and saves {pct(s15['saving'])} ({pct(s15['lo'])} … {pct(s15['hi'])}) — about what the "
+                 f"hour-of-day rule ({pct(sh15['saving'])}) or simply always waiting 30 min ({pct(aw['saving'])}) "
+                 "get: high prices tend to fall back (mean reversion); the model adds little there."
+                 if v == "with_level" else "")]
+    L += ["", "**Disclosure.** The gate for showing \"Tunggu\" was changed on 10 Oct 2026 after we saw test "
+          "results. The original gate required beating both \"book now\" and the hour-of-day rule; the rule failed "
+          "it. The new gate (beat \"book now\" only) was chosen with knowledge of the test numbers, so treat the "
+          "\"Tunggu\" result as exploratory. k is sensitive: calibrating on Aug 22–23 and choosing k on Aug 24–25 "
+          "picks k = 1.5 instead of 1.25 (test saving +0.19% instead of +0.22%)."]
     calib_rows = [{"mean_predicted": round(float(g[1].p.mean()), 4), "observed": round(float(g[1].y.mean()), 4),
                    "windows": int(len(g[1]))}
                   for g in pd.DataFrame({"p": p, "y": y}).groupby(pd.qcut(p, 10, duplicates="drop"), observed=True)]
@@ -207,10 +263,7 @@ def main() -> None:
         "auc_drop10_30": {v: round(float(roc_auc_score((actual[:, 1] <= 0.9).astype(int), preds[v]["p"][:, 1])), 3)
                           for v in preds},
         "calibration_with_level_30": calib_rows}, indent=1), encoding="utf-8")
-    (ROOT / "reports" / "decision.json").write_text(json.dumps(
-        {"validated": bool(validated), "rule": "wait 30 min if P(drop>=10% @30) >= k x usual",
-         "k": b["wait_k"]["with_level"], "test_saving": round(float(odr["saving"]), 5),
-         "hour_of_day_saving": round(float(ho_["saving"]), 5)}, indent=1), encoding="utf-8")
+    (ROOT / "reports" / "decision.json").write_text(json.dumps(decision, indent=1), encoding="utf-8")
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 

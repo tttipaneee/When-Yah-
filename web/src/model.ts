@@ -3,8 +3,8 @@
 // or /api/events (real events with source URLs). Nothing is invented on the client.
 
 // Pickup coordinates for the place list (OpenStreetMap / Nominatim, looked up 10 Oct 2026).
-// Used only to find real events within 5 km. When the Google Maps picker sets state.fromLatLon,
-// that wins.
+// Used to find real events within 5 km and, with the destination, predicted traffic (TomTom, server side).
+// When the map picker (Leaflet) sets state.fromLatLon / state.toLatLon, those win.
 export const PLACE_LATLON: Record<string, { lat: number; lon: number }> = {
   "KL Sentral": { lat: 3.1325847, lon: 101.6879963 },
   "KLCC": { lat: 3.1573751, lon: 101.7123797 },
@@ -23,6 +23,8 @@ const APP_IDS: Record<string, string> = { Grab: "grab", inDrive: "indrive", "GV 
 export interface ModelInput {
   from: string
   fromLatLon?: { lat: number; lon: number } | null
+  to?: string
+  toLatLon?: { lat: number; lon: number } | null
   quotes: { app: string; price: number }[]
   usual?: number | null
   rain?: boolean
@@ -36,7 +38,9 @@ function kualaLumpurNowIso(): string {
 
 export function requestBody(inp: ModelInput) {
   const pickup = inp.fromLatLon ?? PLACE_LATLON[inp.from] ?? null
+  const dropoff = inp.toLatLon ?? (inp.to ? PLACE_LATLON[inp.to] : null) ?? null
   return {
+    dropoff, // with pickup: the API asks TomTom for predicted trip time (traffic) if TOMTOM_API_KEY is set
     datetime: kualaLumpurNowIso(),
     rain: !!inp.rain,
     pickup,
@@ -66,3 +70,28 @@ export function runModel(inp: ModelInput): Promise<any> {
 }
 
 export const APP_ID_TO_NAME: Record<string, string> = { grab: "Grab", indrive: "inDrive", gvride: "GV Ride" }
+
+export interface RealEvent {
+  id: string; name: string; venue: string; lat: number; lon: number
+  start: string; end: string | null; source_url: string
+}
+
+/** Real events today (KL date) from /api/events — every row has a source_url (data/events/malaysia_events.csv). */
+export function fetchEventsToday(): Promise<RealEvent[]> {
+  const klDate = new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10)
+  return fetch(`/api/events?date=${klDate}`).then((r) => (r.ok ? r.json() : []))
+}
+
+/** Great-circle distance in km. */
+export function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const R = 6371, rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/** "16:00" from an ISO time with offset, shown in KL time. */
+export function klTime(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 8 * 3600_000)
+  return d.toISOString().slice(11, 16)
+}

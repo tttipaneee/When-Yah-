@@ -93,5 +93,66 @@ def test_usual_price_estimate_only_when_fare_check_passed():
 
 def test_metrics_structured_for_judges_screen():
     d = client.get("/api/metrics").json()
-    assert d["structured"]["calibration_with_level_30"] and d["decision"]["validated"] in (True, False)
+    assert d["structured"]["calibration_with_level_30"]
+    assert all(v["validated"] in (True, False) for v in d["decision"]["variants"].values())
     assert "trend_experiment" in d["experiments"]
+
+
+def test_tunggu_only_when_rule_validated_and_odds_high():
+    from api.forecast import decision_rule
+    jam = {**BODY, "datetime": "2026-10-16T18:10:00+08:00", "quotes": [{"app": "grab", "price_rm": 40.0}],
+           "usual_price_rm": 20.0}
+    d = client.post("/api/forecast", json=jam).json()
+    gate = decision_rule().get("variants", {}).get("with_level", {})
+    if d["decision"] == "wait":
+        assert gate.get("validated") and d["wait_minutes"] in (15, 30, 45, 60)
+        assert set(d["expected_saving_rm"]) == {"grab"} and any(r.startswith("Tunggu") for r in d["reasons"])
+    quiet = {**BODY, "datetime": "2026-10-13T14:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 12.0}],
+             "usual_price_rm": 15.0}
+    assert client.post("/api/forecast", json=quiet).json()["decision"] == "book_now"
+
+
+def test_traffic_jam_flips_tunggu_and_warns():
+    jam = {**BODY, "datetime": "2026-10-16T18:10:00+08:00", "quotes": [{"app": "grab", "price_rm": 40.0}],
+           "usual_price_rm": 20.0}
+    base = client.post("/api/forecast", json=jam).json()
+    if base["decision"] == "wait":
+        h = base["wait_minutes"]
+        d = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 32}}).json()
+        assert d["decision"] == "book_now" and d["traffic"]["flipped_to_book_now"]
+        assert any(r.startswith("Book now — jam coming") for r in d["reasons"])
+        assert not any(r.startswith("Tunggu") for r in d["reasons"])
+        clear = client.post("/api/forecast", json={**jam, "traffic_min": {"0": 20, str(h): 18}}).json()
+        assert clear["decision"] == "wait" and not clear["traffic"]["jam_ahead"]
+    quiet = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "quotes": [{"app": "grab", "price_rm": 22.0}],
+             "usual_price_rm": 20.0, "traffic_min": {"0": 18, "15": 20, "30": 26, "45": 30, "60": 34}}
+    d = client.post("/api/forecast", json=quiet).json()
+    assert d["traffic"]["jam_ahead"] and any(r.startswith("Traffic predicted to build") for r in d["reasons"])
+    assert client.post("/api/forecast", json=BODY).json()["traffic"] is None
+
+
+def test_tomtom_traffic_used_when_pickup_and_dropoff(monkeypatch):
+    import api.forecast as f
+    monkeypatch.setattr(f, "predicted_minutes", lambda a, b, t: {0: 18.0, 15: 21.0, 30: 27.0, 45: 30.0, 60: 33.0})
+    body = {**BODY, "datetime": "2026-10-12T17:00:00+08:00", "pickup": {"lat": 3.158, "lon": 101.7117},
+            "dropoff": {"lat": 3.1177, "lon": 101.6774}, "quotes": [{"app": "grab", "price_rm": 22.0}],
+            "usual_price_rm": 20.0}
+    d = client.post("/api/forecast", json=body).json()
+    assert d["traffic"]["source"] == "TomTom traffic prediction" and d["traffic"]["jam_ahead"]
+    assert any("TomTom traffic prediction" in r for r in d["reasons"])
+
+
+def test_no_tomtom_key_means_no_traffic(monkeypatch):
+    from api.traffic import predicted_minutes
+    monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
+    assert predicted_minutes((3.158, 101.7117), (3.1177, 101.6774), __import__("datetime").datetime.now()) is None
+
+
+def test_event_levels_right_here_and_in_area():
+    sat = {**BODY, "datetime": "2026-10-10T19:30:00+08:00"}
+    here = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0537311, "lon": 101.6934618}}).json()
+    e = next(x for x in here["events"] if "MAMAMOO" in x["name"])
+    assert e["level"] == "right_here" and e["km"] <= 1.0
+    area = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0763304, "lon": 101.7111343}}).json()
+    e = next(x for x in area["events"] if "MAMAMOO" in x["name"])  # Bandar Tasik Selatan, ~3 km away
+    assert e["level"] == "in_area" and 1.0 < e["km"] <= 5.0
