@@ -87,6 +87,11 @@ Fill in as they're created; keep them working.
   = jam: "Wait" flips to "Book now — jam coming". If a Grab quote's trip gets ≥ 10% (and 3 min) longer later, the reason adds
   that Grab's fare includes a per-minute charge (Grab fare structure, Jan 2023), in words only. Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
+- Forecast also returns `situation` ∈ `jam_coming | event_exit | surge | pricey | rush_hour | normal` (first match:
+  jam ahead, exit-hint window, level ≥ 1.5, level ≥ 1.2, expected rise ≥ 1.5%) and `urgency` ∈ `urgent | wait | no_gain`
+  (`wait` iff decision is wait; `urgent` if jam ahead, event ending soon or rising). Labels only, no new numbers.
+- "Booked? Tell us what you paid" card: app + RM paid, stored in the browser's localStorage (`whenyah.fares`) only,
+  never sent; the thank-you compares the typed quote (and the expected price after waiting, if advised) with the fare paid.
 - `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as
   `reports/case_studies.md`, checked by a test). Shown in the "What we saw in real ride data" card (no city named there).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).

@@ -82,6 +82,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 KL = ZoneInfo("Asia/Kuala_Lumpur")
 HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's own NYC taxi zone where the effect was measured
 JAM_FACTOR = 1.25
+RISE_PCT = 0.015  # "edging up": expected rise at some horizon worth a "book now" note (product threshold)
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
@@ -171,6 +172,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         saving = {a: round(rm * max(-best.pct_change, 0), 2) for a, rm in quotes.items()}
         risk = {a: round(rm * max(best.pct_high, 0), 2) for a, rm in quotes.items()}
     at_best = best.expected_rm if wait else quotes
+    rise = max(horizon, key=lambda h: h.pct_change)
 
     reasons.append(f"Chance that waiting 30 min saves you 10% or more: {odds.p_save10:.0%} "
                    f"(usual: {odds.typical_p_save10:.0%}); price in 30 min likely between "
@@ -203,8 +205,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
-        rise = max(horizon, key=lambda h: h.pct_change)
-        if rise.pct_change >= 0.015:  # model expects the price to edge up (e.g. toward the evening peak)
+        if rise.pct_change >= RISE_PCT:  # model expects the price to edge up (e.g. toward the evening peak)
             reasons.append(f"Book now: the model expects the price to edge up by +{rise.minutes} min "
                            f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
                            "a time-of-day pattern from our training data"
@@ -218,7 +219,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
     pk = (req.pickup.lat, req.pickup.lon) if req.pickup else None
-    events, ev_reasons = [], []
+    events, ev_reasons, exit_soon, exit_now = [], [], False, False
     for e in nearby:
         km = round(haversine_km(pk[0], pk[1], e.lat, e.lon), 1) if pk else None
         lvl = None if km is None else ("right_here" if km <= HERE_KM else "in_area")
@@ -230,6 +231,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         # (own prefix so the web app, which redraws the "Event right here" rows itself, still shows it)
         to_end = (e.end - req.datetime).total_seconds() / 60 if e.end else None
         if eff and lvl == "right_here" and to_end is not None and -45 <= to_end <= 30:
+            exit_soon, exit_now = exit_soon or to_end > 0, True
             ev_reasons.append(
                 f"Event ending right here: {e.name} " + (f"ends at {e.end:%H:%M}" if to_end > 0 else
                                                          f"ended at {e.end:%H:%M}")
@@ -239,7 +241,17 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
             " — in our training data, prices within ~1 km of a stadium rose right after games; not measured for "
             "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))
     reasons += ev_reasons
+    # Situation (first match wins) and urgency: product labels on the outputs above, no new numbers
+    rising = rise.pct_change >= RISE_PCT
+    situation = ("jam_coming" if traffic is not None and traffic.jam_ahead else
+                 "event_exit" if exit_now else
+                 "surge" if level is not None and level >= 1.5 else
+                 "pricey" if level is not None and level >= 1.2 else
+                 "rush_hour" if rising else "normal")
+    urgency = ("wait" if wait else
+               "urgent" if (traffic is not None and traffic.jam_ahead) or exit_soon or rising else "no_gain")
     return ForecastResponse(
+        situation=situation, urgency=urgency,
         datetime=req.datetime, horizon=horizon, wait_odds=odds, decision="wait" if wait else "book_now",
         best_time=req.datetime + timedelta(minutes=wait_minutes), wait_minutes=wait_minutes,
         expected_saving_rm=saving, risk_if_wait_rm=risk,

@@ -224,3 +224,25 @@ def test_no_hundred_percent_drop_chance():
     # audit fix: a thin isotonic top step must not show "100% chance" (ml.train.drop_prob caps it)
     for s in client.get("/api/demo").json():
         assert all(h["p_drop10"] < 0.9 for h in s["response"]["horizon"])
+
+
+def test_situation_and_urgency_follow_the_outputs():
+    for hh in (8, 13, 18, 22):
+        for usual in (None, 20.0):
+            body = {**BODY, "datetime": f"2026-10-16T{hh:02d}:10:00+08:00",
+                    "quotes": [{"app": "grab", "price_rm": 40.0}], "usual_price_rm": usual}
+            d = client.post("/api/forecast", json=body).json()
+            assert (d["urgency"] == "wait") == (d["decision"] == "wait")
+            if usual is None:
+                assert d["situation"] not in ("surge", "pricey")  # level unknown without a usual price
+            elif d["situation"] != "event_exit" and d["situation"] != "jam_coming":
+                assert d["situation"] == "surge"  # 40 / 20 = 2x usual
+    jam = {**BODY, "quotes": [{"app": "grab", "price_rm": 15.0}], "usual_price_rm": 15.0,
+           "traffic_min": {"0": 20, "15": 30, "30": 32}}
+    d = client.post("/api/forecast", json=jam).json()
+    assert d["situation"] == "jam_coming" and d["urgency"] in ("urgent",)
+    zepp = {"lat": 3.1394413, "lon": 101.7091281}
+    d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp}).json()
+    from api.forecast import event_effect
+    if event_effect():
+        assert d["situation"] == "event_exit" and d["urgency"] in ("urgent", "wait")

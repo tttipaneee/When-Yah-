@@ -92,6 +92,9 @@ class ForecastResponse(BaseModel):
     model_version: str
     usual_price_estimate: UsualPriceEstimate | None = None  # null unless reports/fare_check.json passed
     traffic: TrafficInfo | None = None  # only when the request carried traffic_min
+    # rule-based labels on the outputs above (no new numbers): what kind of moment this is, and how urgent
+    situation: Literal["jam_coming", "event_exit", "surge", "pricey", "rush_hour", "normal"] = "normal"
+    urgency: Literal["urgent", "wait", "no_gain"] = "no_gain"
     evidence: dict[str, str]
 
 

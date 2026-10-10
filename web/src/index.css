@@ -305,3 +305,17 @@ button.opt:hover{border-color:var(--ink)}
 .study .chart{width:100%;height:auto}
 .study .sub{margin-top:6px}
 
+
+/* situation + urgency chips */
+.decide .chips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 6px}
+.decide .chip{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:rgba(16,20,16,.08);color:#101410;letter-spacing:.01em}
+.decide .chip.urg.urgent{background:#F26B1D;color:#fff}
+.decide .chip.urg.wait{background:#101410;color:#C4F135}
+
+
+/* fare report */
+.fare-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
+.fare-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700}
+.fare-form select,.fare-form input{font:inherit;font-size:15px;padding:10px;border:2px solid #101410;border-radius:12px;background:#fff;min-width:0}
+.fare-form .go{grid-column:1/-1}
+

@@ -444,6 +444,7 @@ export default function App() {
       return '<div><div class="why-top"><span>'+lv+(e.km!=null?' ('+e.km.toFixed(1)+' km)':'')+': '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</div></div>'}).join("");
     html+='<div class="why-src">Source: '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
     $("why").innerHTML=html;
+    renderFareReport();
   }
   function renderPrediction(fromModel){
     if(!fromModel)requestModel();
@@ -451,6 +452,10 @@ export default function App() {
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
     $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Predicting…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
+    // situation + urgency (API labels on the model outputs; no extra numbers)
+    var SIT={jam_coming:"Jam coming",event_exit:"Event ending nearby",surge:"Surge: ≥1.5× your usual",pricey:"Pricier than usual",rush_hour:"Prices edging up",normal:"Normal moment"};
+    var URG={urgent:"Urgent: book soon",wait:"Worth waiting",no_gain:"No gain from waiting"};
+    $("dChips").innerHTML=MODEL&&MODEL.situation?'<span class="chip sit">'+esc(SIT[MODEL.situation]||"")+'</span><span class="chip urg '+esc(MODEL.urgency)+'">'+esc(URG[MODEL.urgency]||"")+'</span>':"";
     var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
     $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
       tung?(function(t){return t.charAt(0).toUpperCase()+t.slice(1)})(tung.replace(/^Wait \d+ min: /,""))+".":
@@ -636,6 +641,44 @@ export default function App() {
   fetchEventsToday().then(function(ev){REAL_EVENTS=ev||[];EVENTS_LOADED=true;renderRadar();drawMain(false);drawBig()})
     .catch(function(){EVENTS_LOADED=true;renderRadar()});
   fetchCaseStudies().then(renderStudies);
+  /* ---------- "Booked? Tell us what you paid" (localStorage only; never sent) ---------- */
+  var FARE_KEY="", FARE_STORE="whenyah.fares";
+  var APP_NAME={grab:"Grab",indrive:"inDrive",gvride:"GV Ride"};
+  function fareList(){try{return JSON.parse(localStorage.getItem(FARE_STORE)||"[]")}catch(e){return []}}
+  function renderFareReport(){
+    var el=$("fareReport");if(!el)return;
+    if(!MODEL){FARE_KEY="";el.innerHTML='<div class="empty">Run a forecast first.</div>';return}
+    var key=JSON.stringify([state.from,state.to,state.quotes,state.usual,state.rain]);  // one report per forecast input
+    if(key===FARE_KEY)return;  // same forecast: keep what the user is typing
+    FARE_KEY=key;
+    var done=fareList().filter(function(f){return f.key===key})[0];
+    if(done){el.innerHTML=fareThanks(done);return}
+    var quoted=Object.keys(APP_NAME).filter(function(a){return MODEL.horizon[0].expected_rm[a]!=null});
+    var apps=quoted.length?quoted:Object.keys(APP_NAME);
+    el.innerHTML='<form class="fare-form" id="fareForm">'+
+      '<label>App<select id="fareApp">'+apps.map(function(a){return '<option value="'+a+'">'+APP_NAME[a]+'</option>'}).join("")+'</select></label>'+
+      '<label>You paid (RM)<input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="e.g. 18.50" required></label>'+
+      '<button class="go" type="submit">Submit fare</button></form>';
+    $("fareForm").onsubmit=function(ev){
+      ev.preventDefault();
+      var app=$("fareApp").value,paid=parseFloat($("farePaid").value);
+      if(!(paid>0&&paid<1000)){toast("Enter the RM amount you paid");return}
+      var q=state.quotes.filter(function(x){return x.price>0&&x.app===APP_NAME[app]})[0];
+      var hw=MODEL.decision==="wait"?MODEL.horizon.filter(function(h){return h.minutes===MODEL.wait_minutes})[0]:null;
+      var f={key:key,at:new Date().toISOString(),from:state.from,to:state.to,app:app,paid:paid,
+             quoted:q?q.price:null,decision:MODEL.decision,wait_minutes:MODEL.wait_minutes,
+             expected_after_wait:hw&&hw.expected_rm[app]!=null?hw.expected_rm[app]:null};
+      try{var all=fareList();all.push(f);localStorage.setItem(FARE_STORE,JSON.stringify(all))}catch(e){}
+      el.innerHTML=fareThanks(f);toast("Thanks — fare saved on this phone");
+    };
+  }
+  function fareThanks(f){
+    var line=f.quoted!=null?"You saw "+rm(f.quoted)+" on "+APP_NAME[f.app]+" when you checked and paid "+rm(f.paid)+
+      " ("+(f.paid-f.quoted>0.004?rm(f.paid-f.quoted)+" more":f.quoted-f.paid>0.004?rm(f.quoted-f.paid)+" less":"the same")+")."
+      :"You paid "+rm(f.paid)+" on "+APP_NAME[f.app]+".";
+    var w=f.decision==="wait"&&f.expected_after_wait!=null?" The forecast expected about "+rm(f.expected_after_wait)+" after waiting "+f.wait_minutes+" min.":"";
+    return '<div class="wrow ok"><span class="wic">'+ICON_CHECK+'</span><div><b>Thanks — saved</b><small>'+esc(line+w)+'</small></div><span></span></div>';
+  }
   /* ---------- study cases (real ride data, reports/case_studies.md) ---------- */
   function renderStudies(d){
     var el=$("studies");if(!el)return;
@@ -791,6 +834,7 @@ export default function App() {
         <section className="decide" aria-live="polite">
           <div>
             <div className="k">Best move</div>
+            <div className="chips" id="dChips"></div>
             <div className="big" id="dTitle">Wait 30 min</div>
             <p id="dText"></p>
             <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>to book</span></div>
@@ -831,6 +875,13 @@ export default function App() {
             <div><h2 id="rt">Your apps, now vs <span id="bestAt">18:40</span></h2><p className="sub">Cheapest first, based on the prices you typed.</p></div>
           </div>
           <div className="rank" id="rank"></div>
+        </section>
+
+        <section className="card" aria-labelledby="ft">
+          <div className="card-head">
+            <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved on this phone only. Real fares like yours are how the forecast gets checked in Malaysia.</p></div>
+          </div>
+          <div id="fareReport"></div>
         </section>
 
         <section className="card" aria-labelledby="st">
