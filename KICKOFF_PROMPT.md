@@ -21,7 +21,7 @@ ambiguous decisions.
    Vite React TS app). Add `scripts/run_demo.sh`. Fill in Commands.
 2. Stub `/api/forecast` and `/api/events` with the exact contract shapes (`model_version: "stub"`), so my
    partner can start the frontend now.
-3. Tell me exactly where to put the Boston dataset and the TD Garden game schedule CSV (I'll provide
+3. Tell me exactly where to put the Boston dataset and the TD Garden game schedule (already in `data/events/td_garden_games.csv`; I.ll provide
    them), then write `ml/check_signal.py` per `.claude/rules/ml.md`, run it, and use the `signal-checker`
    agent for a GO / SWITCH recommendation before 14:00.
 4. After GO: `build_dataset.py`, `features.py`, `train.py` (no-level + with-level), `evaluate.py` with

@@ -12,7 +12,7 @@ paths:
 - **Primary:** Kaggle "Uber and Lyft Dataset Boston, MA" (ravi72munde). Check actual column names and
   date range on load; don't assume.
 - **Game schedules:** Celtics and Bruins home games at TD Garden during the dataset's dates, from public
-  schedule pages; save `data/raw/td_garden_games.csv` with date, start time, end time (or start + a
+  schedule pages; save `data/events/td_garden_games.csv` (tracked in git) with date, start time, end time (or start + a
   typical duration stated by the source), and source URL.
 - **Backup:** City of Chicago "Transportation Network Providers – Trips" (one recent month).
 - Raw data in `data/raw/` (gitignored). Malaysian events in `data/events/malaysia_events.csv` with a
