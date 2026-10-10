@@ -276,6 +276,7 @@ export default function App() {
     if(z){e.preventDefault();openZone(z)}
   });
   $("zoneChip").onclick=function(){openZone(this)};
+  $("eventBtn").onclick=function(){openZone(this)};
   $("swap").onclick=function(){var t=state.from;state.from=state.to;state.to=t;syncFields(true)};
 
   // App logo from web/public/apps/<id>.png (or .svg), supplied by the team; initials if the file is missing.
@@ -342,8 +343,8 @@ export default function App() {
     });
     var up=ks.map(function(k){return xs[k]+","+y(HI[k])}).join(" ");
     var dn=ks.slice().reverse().map(function(k){return xs[k]+","+y(LO[k])}).join(" ");
-    o+='<polygon points="'+up+" "+dn+'" fill="rgba(196,241,53,.6)"/>';
-    o+='<polyline points="'+ks.map(function(k){return xs[k]+","+y(PCT[k])}).join(" ")+'" fill="none" stroke="#101410" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+    o+='<polygon class="band" points="'+up+" "+dn+'" fill="rgba(196,241,53,.6)"/>';
+    o+='<polyline class="line" pathLength="1" points="'+ks.map(function(k){return xs[k]+","+y(PCT[k])}).join(" ")+'" fill="none" stroke="#101410" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
     ks.forEach(function(k){
       var best=k===bestMin;
       o+='<circle cx="'+xs[k]+'" cy="'+y(PCT[k])+'" r="'+(best?7:4)+'" fill="'+(best?'#C4F135':'#101410')+'" stroke="#101410" stroke-width="'+(best?3:0)+'"/>';
@@ -358,7 +359,7 @@ export default function App() {
     // ring = chance at the advised wait (Wait X min), else the 30-min headline chance
     var hw=r.decision==="wait"?r.horizon.filter(function(h){return h.minutes===r.wait_minutes})[0]:null;
     PDROP=hw?hw.p_drop10:r.wait_odds.p_save10;
-    var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="drop ≥10%<br>in "+(hw?r.wait_minutes:30)+" min";
+    var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="chance 10%+<br>cheaper in "+(hw?r.wait_minutes:30)+"m";
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
@@ -405,9 +406,12 @@ export default function App() {
     var URG={urgent:"Urgent: book soon",wait:"Worth waiting",no_gain:"No gain from waiting"};
     $("dChips").innerHTML=MODEL&&MODEL.situation?'<span class="chip sit">'+esc(SIT[MODEL.situation]||"")+'</span><span class="chip urg '+esc(MODEL.urgency)+'">'+esc(URG[MODEL.urgency]||"")+'</span>':"";
     var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
-    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):decisionText(tung);
+    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Checking your prices…"):decisionText(tung);
+    $("dDo").innerHTML=MODEL?decisionAction():"";
+    var dc=document.querySelector(".decide");dc.classList.toggle("loading",!MODEL&&!MODEL_ERR);
+    var dk=MODEL?MODEL.decision+bestMin:"";if(MODEL&&dk!==LAST_DK){LAST_DK=dk;dc.classList.remove("pop");void dc.offsetWidth;dc.classList.add("pop")}
     $("rt").textContent=bestMin===0?"Your apps now":"Your apps: now vs "+hhmm(bestMin);
-    $("pDrop").textContent=Math.round(PDROP*100)+"%";
+    countTo($("pDrop"),MODEL?Math.round(PDROP*100):null);
     $("ringArc").style.strokeDashoffset=String(263.9*(1-PDROP));
     var rows=state.quotes.filter(function(q){return q.price>0}).map(function(q){return{app:q.app,now:q.price,later:q.price*mult}});
     rows.sort(function(a,b){return a.later-b.later});
@@ -416,8 +420,8 @@ export default function App() {
       return '<div class="rk'+(i===0?' best':'')+'">'+appBadge(r.app,ini)+'<span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):bestMin===0?rm(r.now-rows[0].now)+" more than "+esc(rows[0].app):"Now "+rm(r.now))+'</small></span>'+
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
-    }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
-    renderChart();realOnly();aiReset();
+    }).join(""):'<div class="empty">Type at least one price on the home screen to compare your apps here.</div>';
+    renderChart();realOnly();renderOpts();aiReset();
   }
   // Decision in RM for the cheapest app you typed (model % × your price); % only when no price is typed
   function decisionText(tung){
@@ -428,15 +432,49 @@ export default function App() {
       var h=MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0],m=MODEL.wait_minutes;
       var cost=(tung||"").match(/(\d+)% of waits cost more/);
       var odds=Math.round(h.p_drop10*100)+"% chance it gets 10%+ cheaper by then";
-      return (q?"Wait "+m+" min: your "+q.app+" "+rm(q.price)+" is expected around "+rm(q.price*(1+h.pct_change))+
-        " (could be "+rm(q.price*(1+h.pct_low))+" to "+rm(q.price*(1+h.pct_high))+"). ":"Wait "+m+" min: expected "+(h.pct_change<0?pct(h.pct_change)+" cheaper":"about the same")+". ")+
+      return (q?"Your "+q.app+" "+rm(q.price)+" should drop to about "+rm(q.price*(1+h.pct_change))+
+        " (likely "+rm(q.price*(1+h.pct_low))+"–"+rm(q.price*(1+h.pct_high))+"). ":"Expected "+(h.pct_change<0?pct(h.pct_change)+" cheaper":"about the same")+" by then. ")+
         odds.charAt(0).toUpperCase()+odds.slice(1)+"."+(cost?" In our tests, "+cost[1]+"% of waits still cost more.":"");
     }
     var range=q&&o.rm_range[ID[q.app]],dir=function(v){return pct(v)+(v<0?" cheaper":" pricier")};
-    var span="between "+dir(o.pct_low)+" and "+dir(o.pct_high);
-    return (range?"In 30 min your "+q.app+" "+rm(q.price)+" will likely be "+rm(range[0])+" to "+rm(range[1])+" ("+span+"). ":
-        "In 30 min the price will likely be "+span+". ")+
-      "Chance it gets 10%+ cheaper: "+ch+"% ("+(Math.abs(ch-us)<=2?"about the usual "+us+"%":ch>us?"above the usual "+us+"%":"below the usual "+us+"%")+").";
+    return (range?"Waiting is unlikely to help. In 30 min your "+q.app+" "+rm(q.price)+" will likely be "+rm(range[0])+"–"+rm(range[1])+". ":
+        "Waiting is unlikely to help. In 30 min the price will likely be "+dir(o.pct_low)+" to "+dir(o.pct_high)+". ")+
+      "Chance it's 10%+ cheaper: "+ch+"% (usually "+us+"%).";
+  }
+  // One plain action under the verdict (design: "Check again in 15 min" / book on the cheapest app). No new numbers.
+  var LAST_DK="";
+  function cheapestQuote(){
+    var ID={Grab:"grab",inDrive:"indrive","GV Ride":"gvride"};
+    return state.quotes.filter(function(x){return x.price>0&&ID[x.app]}).sort(function(a,b){return a.price-b.price})[0];
+  }
+  function decisionAction(){
+    var q=cheapestQuote();
+    if(MODEL.decision==="wait")return "<b>Do this:</b> don't book yet. Open your apps again at "+hhmm(MODEL.wait_minutes)+".";
+    var n=state.quotes.filter(function(x){return x.price>0}).length;
+    return "<b>Do this:</b> "+(q?"book on "+esc(q.app)+" now"+(n>1?", it's your cheapest.":"."):"book now on the cheapest app.");
+  }
+  function countTo(el,to){  // ring number counts up instead of jumping
+    if(to==null){el.textContent="–";el.dataset.v="";return}
+    var from=parseInt(el.dataset.v||"0",10)||0;el.dataset.v=String(to);
+    if(reduced()||from===to){el.textContent=to+"%";return}
+    var t0=performance.now(),D=700;
+    (function step(t){var k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(from+(to-from)*e)+"%";if(k<1)requestAnimationFrame(step)})(t0);
+  }
+  // "Other options" (design): actions in words only, from the model's decision and real nearby events.
+  function renderOpts(){
+    var el=$("opts");if(!el)return;
+    if(!MODEL){el.parentNode.hidden=true;return}
+    var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',walk:'<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6 3 3v3M9 11l3-3 3 3 3 1M12 8l-2 7"/>',
+      plus:'<path d="M12 5v14M5 12h14"/>',tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>'};
+    var o=[],here=(MODEL.events||[]).filter(function(e){return e.level==="right_here"})[0];
+    if(MODEL.decision==="wait")o.push(['div',I.tag,"Need to leave now?","Book now. You pay what you see, and the price can't go up on you."]);
+    else o.push(['div',I.clock,"Not in a rush?","Check again in 30 min. Chance it's 10%+ cheaper by then: "+Math.round(MODEL.wait_odds.p_save10*100)+"%."]);
+    if(here)o.push(['div',I.walk,"Walk away from the event","Prices next to a venue tend to rise when a big event ends. Walk more than "+HERE_KM+" km away, then check again."]);
+    if(state.quotes.filter(function(x){return x.price>0}).length<3)o.push(['button',I.plus,"Compare one more app","Add another app's price. More prices, better chance of a cheap one."]);
+    el.innerHTML=o.map(function(x){
+      return '<'+x[0]+' class="opt"'+(x[0]==="button"?' type="button" id="optAdd"':'')+'><span class="oi">'+ic(x[1])+'</span><span><b>'+esc(x[2])+'</b><small>'+esc(x[3])+'</small></span></'+x[0]+'>'}).join("");
+    el.parentNode.hidden=false;
+    var b=$("optAdd");if(b)b.onclick=function(){closeRes(true);if(!$("addApp").disabled)$("addApp").click()};
   }
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
@@ -461,6 +499,8 @@ export default function App() {
     // the home Event radar card was removed; events show on the map chip, the map circles and in "Why"
     var near=nearEvents();
     $("chipText").textContent=near.length?(near[0].km<=HERE_KM?"Event right here · ":"Event in the area · ")+near[0].name:"Events today · "+REAL_EVENTS.length;
+    var es=$("eventSub");if(es)es.textContent=!EVENTS_LOADED?"Checking today's events…":near.length?(near[0].km<=HERE_KM?"Right at your pickup: ":"Near your pickup ("+near[0].km.toFixed(1)+" km): ")+near[0].name:
+      REAL_EVENTS.length?"None near your pickup · "+REAL_EVENTS.length+" in KL today":"No big events listed today";
   }
   function renderZoneSheet(){
     // Real events today with sources; no price effect is shown (only validated for NYC baseball)
@@ -574,8 +614,8 @@ export default function App() {
     var apps=quoted.length?quoted:Object.keys(APP_NAME);
     el.innerHTML='<form class="fare-form" id="fareForm">'+
       '<label>App<select id="fareApp">'+apps.map(function(a){return '<option value="'+a+'">'+APP_NAME[a]+'</option>'}).join("")+'</select></label>'+
-      '<label>You paid (RM)<input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="e.g. 18.50" required></label>'+
-      '<button class="go" type="submit">Submit fare</button></form>';
+      '<label>What you paid (RM)<input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="e.g. 18.50" required></label>'+
+      '<button class="go" type="submit">Save fare</button></form>';
     $("fareForm").onsubmit=function(ev){
       ev.preventDefault();
       var app=$("fareApp").value,paid=parseFloat($("farePaid").value);
@@ -609,6 +649,7 @@ export default function App() {
     var p=ptsLoad(),got=Math.max(0,Math.min(n,DAY_CAP-p.day.pts));
     if(!got){toast("Daily limit reached ("+DAY_CAP+" pts)");return 0}
     p.total+=got;p.week.pts+=got;p.day.pts+=got;ptsSave(p);ptsShow();
+    var pc=$("ptsChip");pc.classList.remove("bump");void pc.offsetWidth;pc.classList.add("bump");
     toast("+"+got+" pts · "+why+(got<n?" (daily limit)":""));
     if($("lb").classList.contains("on"))renderLb();
     return got;
@@ -813,11 +854,11 @@ export default function App() {
             <div className="fields">
               <button className="field" id="fFrom" type="button" aria-label="Choose pickup on map">
                 <span className="pin" aria-hidden="true"></span>
-                <span className="txt"><span className="v" id="vFrom"></span></span>
+                <span className="txt"><small>Pickup</small><span className="v" id="vFrom"></span></span>
               </button>
               <button className="field" id="fTo" type="button" aria-label="Choose destination on map">
                 <span className="pin sq" aria-hidden="true"></span>
-                <span className="txt"><span className="v" id="vTo"></span></span>
+                <span className="txt"><small>Drop-off</small><span className="v" id="vTo"></span></span>
               </button>
               <button className="swap" id="swap" type="button" aria-label="Swap pickup and destination">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg>
@@ -835,17 +876,18 @@ export default function App() {
           <div className="card-head">
             <div>
               <h2 id="qt">Enter the prices you see</h2>
-              <p className="sub">Type the price each app shows you right now.</p>
+              <p className="sub">Open each ride app and type the fare it shows right now.</p>
             </div>
           </div>
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
-          <p className="note affil">Logos belong to their owners. When Yah? is not connected to or affiliated with Grab, inDrive or GV Ride.</p>
-          <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
+          <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
+          <p className="note" id="bidNote" hidden>inDrive: type the fare you offered or were offered.</p>
           <label className="usual-box" htmlFor="usual">
-            <span className="usual-top"><b>What do you usually pay for this trip?</b><em>Optional</em></span>
+            <span className="usual-top"><b>Usual price</b><em>Optional</em></span>
             <span className="usual-in"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="e.g. 18" /></span>
-            <small>On a normal, quiet day. With it we can tell if today's price is already high, and the advice gets sharper.</small>
+            <small>What this trip costs on a quiet day. It helps us spot a surge. Not sure? Leave it blank.</small>
           </label>
+          <p className="cta-hint">Tap <b>When Yah?</b> and we'll tell you: book now, or wait and pay less.</p>
           <div className="row-actions">
             <button className="ghost" id="addApp" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
@@ -855,6 +897,14 @@ export default function App() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
           </div>
+        </section>
+
+        <section aria-label="Events near pickup" id="events">
+          <button className="event" type="button" id="eventBtn">
+            <span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
+            <span><b>Event radar</b><small id="eventSub">Checking today's events…</small></span>
+            <span className="tag">Real events</span>
+          </button>
         </section>
 
       </div>
@@ -907,11 +957,12 @@ export default function App() {
             <div className="chips" id="dChips"></div>
             <div className="big" id="dTitle">Wait 30 min</div>
             <p id="dText"></p>
-            <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>to book</span></div>
+            <p className="do" id="dDo"></p>
+            <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>then check again</span></div>
           </div>
           <div className="ring" role="img" aria-label="Chance of a drop of 10 percent or more within 30 minutes">
             <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(16,20,16,.15)" strokeWidth="10"/><circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="#101410" strokeWidth="10" strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="263.9"/></svg>
-            <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">drop ≥10%<br />in 30 min</em></div></div>
+            <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">chance 10%+<br />cheaper in 30m</em></div></div>
           </div>
         </section>
 
@@ -925,17 +976,19 @@ export default function App() {
         <section className="card" aria-labelledby="ct">
           <div className="card-head">
             <div>
-              <h2 id="ct">Price change over the next hour</h2>
-              <p className="sub">Line is the expected change, shaded area is the likely range.</p>
+              <h2 id="ct">Price over the next hour</h2>
+              <p className="sub">Line: our best guess. Green band: where the price will likely land.</p>
             </div>
           </div>
           <svg className="chart" id="chart" viewBox="0 0 320 150" role="img" aria-label="Forecast of percent price change at 15, 30, 45 and 60 minutes"></svg>
           <div className="legend"><span><i style={{width:"14px",height:"3px",background:"#101410",borderRadius:"2px"}}></i>Expected</span><span><i style={{width:"14px",height:"10px",background:"rgba(196,241,53,.6)",borderRadius:"3px"}}></i>Likely range</span><span><i style={{width:"10px",height:"10px",background:"#C4F135",border:"2px solid #101410",borderRadius:"50%"}}></i>Best time</span></div>
         </section>
 
+        <section aria-label="Other options" hidden><div className="k2" style={{margin: "0 2px 8px"}}>Other options</div><div className="opts" id="opts"></div></section>
+
         <section className="card" aria-labelledby="wt">
           <div className="card-head">
-            <div><h2 id="wt">Why</h2><p className="sub">In plain words, from this forecast.</p></div>
+            <div><h2 id="wt">Why</h2><p className="sub">The reasons behind this advice, in plain words.</p></div>
           </div>
           <div id="aiOut" aria-live="polite"></div>
           <details className="why-details"><summary>Details</summary><div className="why2" id="why"></div></details>
@@ -943,7 +996,7 @@ export default function App() {
 
         <section className="card" aria-labelledby="ft">
           <div className="card-head">
-            <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved on this phone only. Real fares like yours are how the forecast gets checked in Malaysia.</p></div>
+            <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved only on this phone. It helps us check our forecasts in Malaysia.</p></div>
           </div>
           <div id="fareReport"></div>
         </section>
