@@ -107,7 +107,9 @@ Fill in as they're created; keep them working.
   were measured) or `in_area` (≤ 5 km, product choice, information only). The map draws a dashed 1 km circle per venue.
   Exit hint: for a `right_here` event with a published `end`, from 30 min before to 45 min after it, a reason starting
   "Event ending right here" says in words (no %) that prices next to a venue went up after big events ended.
-- `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
+- Metrics tab opens the "How we know" Proof screen built only from `/api/metrics` (calibration dots, policy savings vs
+  book-now and the time-of-day rule, ≥1.5× case, AUC, tested experiments, fare check).
+- `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `fare_check` (`reports/fare_check.json`) + `structured` (`reports/metrics.json`: policies, AUC,
   calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).
 Changing the contract: update this section and tell both teammates.

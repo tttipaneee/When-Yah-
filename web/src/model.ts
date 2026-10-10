@@ -87,6 +87,11 @@ export function fetchCaseStudies(): Promise<any> {
   return fetch("/api/case_studies").then((r) => (r.ok ? r.json() : null)).catch(() => null)
 }
 
+/** Proof screen data from /api/metrics (reports/metrics.json, decision.json, experiments, fare_check.json). */
+export function fetchMetrics(): Promise<any> {
+  return fetch("/api/metrics").then((r) => (r.ok ? r.json() : null)).catch(() => null)
+}
+
 /** Great-circle distance in km. */
 export function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
   const R = 6371, rad = Math.PI / 180

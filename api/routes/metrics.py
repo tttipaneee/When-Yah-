@@ -35,4 +35,5 @@ def get_metrics() -> dict:
             verdicts[e] = [m.strip("* ") for m in re.findall(r"^\*\*Result[^\n]*", t, flags=re.M)]
     return {"metrics": _read("metrics.md"), "event_effect": _read("event_effect.md"),
             "structured": _json("metrics.json"), "decision": _json("decision.json"),
-            "event_effect_summary": _json("event_effect.json"), "experiments": verdicts}
+            "event_effect_summary": _json("event_effect.json"), "experiments": verdicts,
+            "fare_check": _json("fare_check.json")}

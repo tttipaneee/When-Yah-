@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchCaseStudies, fetchEventsToday, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchCaseStudies, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -511,6 +511,7 @@ export default function App() {
   document.addEventListener("keydown",function(e){
     if(e.key!=="Escape")return;
     if($("lb").classList.contains("on")){closeLb();return}
+    if($("proof").classList.contains("on")){closeProof();return}
     if($("zoneSheet").classList.contains("on")){closeZone();return}
     if($("fs").classList.contains("on")){closeFs();return}
     if($("res").classList.contains("on"))closeRes();
@@ -534,7 +535,7 @@ export default function App() {
     if(g==="top")sc.scrollTo({top:0,behavior:"smooth"});
     else if(g==="events")sc.scrollTo({top:sc.scrollHeight,behavior:"smooth"});
     else if(g==="leaderboard")openLb();
-    else toast("Proof: odds tested on 19M real rides (reports/metrics.md)");
+    else if(g==="metrics")openProof();
   });
   $("eventBtn").onclick=function(){openZone(this)};
 
@@ -646,8 +647,7 @@ export default function App() {
   }
   function closeLb(){
     $("lb").classList.remove("on");$("lb").setAttribute("aria-hidden","true");
-    document.querySelectorAll(".nav button").forEach(function(x){
-      if(x.dataset.go==="top")x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")});
+    navHome();
   }
   $("closeLb").onclick=function(){closeLb()};
   $("ptsChip").onclick=function(){openLb()};
@@ -655,6 +655,55 @@ export default function App() {
     var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();
   });
   ptsShow();
+  /* ---------- Proof screen: every number from /api/metrics (reports/) ---------- */
+  var PROOF=null;
+  function navHome(){document.querySelectorAll(".nav button").forEach(function(x){
+    if(x.dataset.go==="top")x.setAttribute("aria-current","page");else x.removeAttribute("aria-current")})}
+  function openProof(){
+    $("proof").classList.add("on");$("proof").setAttribute("aria-hidden","false");
+    if(PROOF)renderProof(PROOF);else fetchMetrics().then(function(d){PROOF=d;renderProof(d)});
+    setTimeout(function(){$("closeProof").focus({preventScroll:true})},240);
+  }
+  function closeProof(){$("proof").classList.remove("on");$("proof").setAttribute("aria-hidden","true");navHome()}
+  $("closeProof").onclick=function(){closeProof()};
+  function renderProof(d){
+    var el=$("proofBody");
+    if(!d||!d.structured||!d.decision){el.innerHTML='<div class="empty">Test results unavailable: start the API.</div>';return}
+    var s=d.structured,dv=d.decision.variants||{},wl=dv.with_level||{},nl=dv.no_level||{};
+    var pc=function(v,dp){return (v>0?"+":"")+(v*100).toFixed(dp==null?2:dp)+"%"};
+    var cal=s.calibration_with_level_30||[],top=cal[cal.length-1];
+    // 1. calibration: predicted vs observed per decile, on a 0–25% square
+    var W=280,H=170,mx=0.25,X=function(v){return 30+v/mx*(W-40)},Y=function(v){return H-24-v/mx*(H-34)};
+    var calSvg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Predicted chance vs what happened, ten groups">'+
+      '<line x1="'+X(0)+'" y1="'+Y(0)+'" x2="'+X(mx)+'" y2="'+Y(mx)+'" stroke="rgba(16,20,16,.3)" stroke-dasharray="4 4"/>'+
+      [0,0.1,0.2].map(function(t){return '<text x="'+X(t)+'" y="'+(H-8)+'" font-size="9" text-anchor="middle" fill="rgba(16,20,16,.6)">'+(t*100)+'%</text><text x="24" y="'+(Y(t)+3)+'" font-size="9" text-anchor="end" fill="rgba(16,20,16,.6)">'+(t*100)+'%</text>'}).join("")+
+      cal.map(function(c){return '<circle cx="'+X(c.mean_predicted)+'" cy="'+Y(c.observed)+'" r="5" fill="#C4F135" stroke="#101410" stroke-width="2"/>'}).join("")+
+      '<text x="'+X(0.2)+'" y="'+Y(0.165)+'" font-size="9" fill="rgba(16,20,16,.6)">perfect line</text></svg>';
+    // 2. waiting vs simple rules: mean saving on test days
+    function pol(re){return (s.policies||[]).filter(function(p){return re.test(p.name)})[0]}
+    var rows=[["Book right away",pol(/^Book now/)],["Our Wait rule (usual price typed)",pol(/with_level, odds rule/)],
+      ["Our Wait rule (no usual price)",pol(/no_level, odds rule/)],["Simple time-of-day rule",pol(/^Hour-of-day/)]].filter(function(r){return r[1]});
+    var big=Math.max.apply(0,rows.map(function(r){return r[1].saving}))||1;
+    var bars='<div class="pbars">'+rows.map(function(r){var p=r[1];
+      return '<div class="pb"><div class="pb-top"><span>'+esc(r[0])+'</span><b>'+pc(p.saving)+'</b></div><div class="pb-track"><i style="width:'+Math.max(1,p.saving/big*100)+'%"></i></div>'+
+        (p.wait_rate?'<small>Waits '+pc(p.wait_rate,0).replace("+","")+' of the time · '+pc(p.waits_cost_more,0).replace("+","")+' of waits cost more</small>':'')+'</div>'}).join("")+'</div>';
+    var hi=wl.level_ge_1_5;
+    var EXP={trend_experiment:"A second quote (price trend)",traffic_experiment:"Live traffic",extreme_experiment:"Fix for extreme prices",borough_experiment:"Area averages"};
+    var exps=[];Object.keys(d.experiments||{}).forEach(function(k){(d.experiments[k]||[]).forEach(function(t){
+      exps.push((EXP[k]?EXP[k]+": ":"")+t.replace(/\*\*/g,"").replace(/^Result( [AB])?: /,""))})});
+    var fc=d.fare_check&&d.fare_check.methods&&d.fare_check.methods.tomtom;
+    var card=function(h,body){return '<section class="card"><h2>'+h+'</h2>'+body+'</section>'};
+    el.innerHTML=
+      card("Are the odds honest?",calSvg+'<p class="sub">Each dot is a tenth of '+s.test_windows.toLocaleString()+' test cases. On the line = the chance we gave is what happened. Highest group: we said '+
+        pc(top.mean_predicted,1).replace("+","")+', it happened '+pc(top.observed,1).replace("+","")+'.</p>')+
+      card("Does waiting pay?",bars+'<p class="sub">Average saving vs booking right away, on held-out test days. Our rule beats booking right away, but a simple time-of-day rule saves slightly more — we say so. When our rule says wait it saves '+
+        pc(wl.saving_when_wait)+' on average.</p>')+
+      (hi?card("When the price is already high",'<p class="sub">At 1.5× usual or more ('+hi.windows+' test cases) waiting saved <b>'+pc(hi.saving,1)+'</b> on average; the time-of-day rule '+pc(hi.hour_of_day_saving,1)+' and always waiting 30 min '+pc(hi.always_wait_30_saving,1)+'. High prices settle back down — this is where waiting pays.</p>'):"")+
+      card("How sharp is the timing?",'<p class="sub">Telling good from bad moments to wait: <b>'+(s.auc_drop10_30.with_level||0).toFixed(2)+'</b> (0.50 = coin flip, 1.00 = perfect). Modest — so we show odds and ranges, not promises.</p>')+
+      card("Other things we tested",'<ul class="plist2">'+exps.map(function(t){return '<li>'+esc(t)+'</li>'}).join("")+
+        (fc?'<li>Usual price from the route: median error '+pc(fc.median_abs_error,0).replace("+","")+' on '+fc.n_quotes+' real Grab quotes; our bar is 15% → kept off, you type it.</li>':"")+'</ul>')+
+      '<p class="why-src">Test days held out ('+esc(s.test_days)+'). Rule changes made after seeing test results are listed in reports/metrics.md. Calibration shown is before the 10 Oct cap.</p>';
+  }
   function fareThanks(f){
     var line=f.quoted!=null?"You saw "+rm(f.quoted)+" on "+APP_NAME[f.app]+" when you checked and paid "+rm(f.paid)+
       " ("+(f.paid-f.quoted>0.004?rm(f.paid-f.quoted)+" more":f.quoted-f.paid>0.004?rm(f.quoted-f.paid)+" less":"the same")+")."
@@ -821,6 +870,16 @@ export default function App() {
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
       </button>
     </nav>
+
+    <div className="res" id="proof" role="dialog" aria-modal="true" aria-label="Proof" aria-hidden="true">
+      <div className="res-scroll">
+        <div className="res-top">
+          <button className="back" id="closeProof" type="button" aria-label="Back to home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
+          <div className="res-ttl"><div className="title">How we know</div><div className="hello">Tested on real ride data, held-out days</div></div>
+        </div>
+        <div className="stack" id="proofBody"><div className="empty">Loading the test results…</div></div>
+      </div>
+    </div>
 
     <div className="res" id="lb" role="dialog" aria-modal="true" aria-label="Leaderboard" aria-hidden="true">
       <div className="res-scroll">
