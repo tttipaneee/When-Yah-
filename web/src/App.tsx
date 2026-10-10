@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React, { useEffect } from "react";
 import "./index.css";
+import { runModel } from "./model";
 
 export default function App() {
   useEffect(() => {
@@ -19,10 +20,12 @@ export default function App() {
     {n:"Petaling Jaya SS2",s:"Petaling Jaya",x:30,y:58}
   ];
   var APPS=["Grab","inDrive","GV Ride","Other app"];
-  var PCT={0:0,15:-5,30:-13,45:-10,60:-4};
-  var LO ={0:0,15:-9,30:-19,45:-17,60:-12};
-  var HI ={0:0,15:1,30:-6,45:-2,60:4};
-  var PDROP=0.62;
+  // Filled by the real model (/api/forecast via ./model.ts) — no sample numbers are shown
+  var PCT={0:0,15:0,30:0,45:0,60:0};
+  var LO ={0:0,15:0,30:0,45:0,60:0};
+  var HI ={0:0,15:0,30:0,45:0,60:0};
+  var PDROP=0;
+  var MODEL=null,MODEL_ERR=null;
   var EVENT={
     at:"Axiata Arena",r:46,
     name:"Example concert",
@@ -78,7 +81,7 @@ export default function App() {
   var fsOpener=null,resOpener=null,zoneOpener=null,zoneBox=null;
   var WALK={n:"Sri Petaling",pct:-8,min:15};
   var state={from:"Axiata Arena",to:"KL Sentral",active:"from",prevFrom:null,
-    quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}]};
+    quotes:[{app:"Grab",price:28},{app:"inDrive",price:24}],usual:0,rain:false,fromLatLon:null};
 
   function $(id){return document.getElementById(id)}
   function place(n){for(var i=0;i<PLACES.length;i++)if(PLACES[i].n===n)return PLACES[i];return PLACES[0]}
@@ -284,6 +287,8 @@ export default function App() {
     var b=e.target.closest("button[data-rm]");if(!b)return;
     state.quotes.splice(+b.dataset.rm,1);renderQuotes();renderPrediction();
   });
+  $("usual").addEventListener("input",function(){var v=parseFloat(this.value);state.usual=isFinite(v)&&v>0?v:0;renderPrediction()});
+  $("rain").addEventListener("change",function(){state.rain=this.checked;renderPrediction()});
   $("addApp").onclick=function(){
     var used=state.quotes.map(function(q){return q.app});
     var next=APPS.filter(function(a){return used.indexOf(a)<0})[0];
@@ -318,10 +323,35 @@ export default function App() {
     });
     $("chart").innerHTML=o;
   }
-  function renderPrediction(){
-    var mult=1+PCT[bestMin]/100;
-    $("dTitle").textContent="Wait "+bestMin+" min";
-    $("dText").textContent="Expected "+Math.abs(PCT[bestMin])+"% cheaper around "+hhmm(bestMin)+". Range "+Math.abs(HI[bestMin])+"% to "+Math.abs(LO[bestMin])+"% lower.";
+  /* ---------- real model (./model.ts → /api/forecast) ---------- */
+  function applyModel(r){
+    r.horizon.forEach(function(h){PCT[h.minutes]=Math.round(h.pct_change*100);LO[h.minutes]=Math.round(h.pct_low*100);HI[h.minutes]=Math.round(h.pct_high*100)});
+    PDROP=r.wait_odds.p_save10;
+    bestMin=r.decision==="wait"?r.wait_minutes:0;
+  }
+  function requestModel(){
+    runModel({from:state.from,fromLatLon:state.fromLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
+      .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}})
+      .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
+  }
+  function realOnly(){
+    // Cards without a traceable source stay hidden until they have one (evidence rule)
+    $("walkCard").hidden=true;$("transitCard").hidden=true;
+    $("opts").querySelectorAll('[data-go="transit"]').forEach(function(n){n.remove()});
+    var wc=$("wt").closest(".card"),tg=wc&&wc.querySelector(".tag");if(tg)tg.hidden=true;
+    if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
+    var html=MODEL.reasons.map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
+    html+=MODEL.events.map(function(e){return '<div><div class="why-top"><span>Event nearby: '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured for Malaysian events</div></div>'}).join("");
+    html+='<div class="why-src">Source: '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
+    $("why").innerHTML=html;
+  }
+  function renderPrediction(fromModel){
+    if(!fromModel)requestModel();
+    var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
+    var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
+    $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Ramal…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
+    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):
+      "Chance the price drops ≥10% if you wait 30 min: "+Math.round(o.p_save10*100)+"% (usual "+Math.round(o.typical_p_save10*100)+"%). In 30 min likely "+sg(Math.round(o.pct_low*100))+"% to "+sg(Math.round(o.pct_high*100))+"%.";
     $("bestAt").textContent=hhmm(bestMin);
     $("pDrop").textContent=Math.round(PDROP*100)+"%";
     $("ringArc").style.strokeDashoffset=String(263.9*(1-PDROP));
@@ -332,7 +362,7 @@ export default function App() {
       return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?"Cheapest at "+hhmm(bestMin):"Now "+rm(r.now))+'</small></span>'+
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>';
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
-    renderChart();renderWalk();renderTransit();renderOpts();renderWhy();
+    renderChart();renderWalk();renderTransit();renderOpts();renderWhy();realOnly();
   }
   function lowest(){var p=state.quotes.map(function(q){return q.price}).filter(function(v){return v>0});return p.length?Math.min.apply(0,p):0}
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
@@ -635,7 +665,7 @@ export default function App() {
     var g=b.dataset.go,sc=$("scroll");
     if(g==="top")sc.scrollTo({top:0,behavior:"smooth"});
     else if(g==="events")sc.scrollTo({top:sc.scrollHeight,behavior:"smooth"});
-    else toast("Proof screen: savings vs book-now baseline");
+    else toast("Proof: odds tested on 19M real rides (reports/metrics.md)");
   });
   $("eventBtn").onclick=function(){openFs("from",this,true);openZone($("zoneChip"))};
 
@@ -705,6 +735,11 @@ export default function App() {
           </div>
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
+          <div className="qrow">
+            <div className="amt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="Harga biasa (optional)" aria-label="Usual price for this trip (optional)" /></div>
+            <label className="ghost"><input id="rain" type="checkbox" /> Hujan</label>
+          </div>
+          <p className="note">Tahu harga biasa? Masukkan untuk ramalan lebih tepat.</p>
           <div className="row-actions">
             <button className="ghost" id="addApp" type="button">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
@@ -792,7 +827,7 @@ export default function App() {
           <div className="rank" id="rank"></div>
         </section>
 
-        <p className="foot">Sample forecast shown. Real figures come from the trained model and your typed prices. Quotes may exclude tolls and surcharges. Train fares and times are examples; real data will come from Prasarana feeds.</p>
+        <p className="foot">Forecast from our model, tested on 19M real ride-hailing trips (NYC, Aug 2024), applied to your typed prices and local time. Not connected to Grab, inDrive or GV Ride. Quotes may exclude tolls and surcharges.</p>
 
         </div>
       </div>

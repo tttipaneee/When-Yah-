@@ -10,7 +10,7 @@ from api.routes import demo, events, forecast, metrics
 app = FastAPI(title="When Yah? API")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:3000")],
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )

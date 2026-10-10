@@ -106,7 +106,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                for m, (pc, lo, hi, p) in pred.items()]
     h30 = next(h for h in horizon if h.minutes == 30)
     typical = load_bundle()["base_rate"][30]
-    odds = WaitOdds(minutes=30, p_save10=h30.p_drop10, typical_p_save10=round(typical, 3),
+    odds = WaitOdds(minutes=30, p_save10=h30.p_drop10, typical_p_save10=round(typical, 2),
                     pct_low=h30.pct_low, pct_high=h30.pct_high,
                     rm_range={a: [round(rm * (1 + h30.pct_low), 2), round(rm * (1 + h30.pct_high), 2)]
                               for a, rm in quotes.items()})

@@ -50,7 +50,7 @@ Fill in as they're created; keep them working.
 - Extreme-price calibration: `python -m ml.experiment_extreme` (→ `reports/extreme_experiment.md`)
 - Fare check (needs real off-peak quotes in `data/fares/offpeak_quotes.csv`): `python -m ml.fare_check` (→ `reports/fare_check.md`, gate for `usual_price_estimate`)
 - API tests: `python -m pytest -q tests`
-- Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
+- Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:3000, API http://localhost:8000/docs
 
 ## API contract (shared by frontend and backend)
 - `GET /api/events?date=YYYY-MM-DD` → `[{id, name, venue, lat, lon, start, end, source_url}]` (`end` is `null` when no source publishes it)
