@@ -48,6 +48,7 @@ Fill in as they're created; keep them working.
 - Borough experiment: `python -m ml.experiment_borough` (→ `reports/borough_experiment.md`; zone→borough from `data/zones/taxi_zones_borough.csv`, NYC Open Data taxi zones export 2025-10-03)
 - Traffic: `python -m ml.traffic && python -m ml.experiment_traffic` (→ `reports/traffic_experiment.md`)
 - Extreme-price calibration: `python -m ml.experiment_extreme` (→ `reports/extreme_experiment.md`)
+- Case studies (event exit + surge fall-back, charts): `python -m ml.case_studies` (→ `reports/case_studies.md`, `reports/case_*.png`; needs matplotlib, dev only)
 - Fare check (needs real off-peak quotes in `data/fares/offpeak_quotes.csv`): `python -m ml.fare_check` (→ `reports/fare_check.md`, gate for `usual_price_estimate`)
 - API tests: `python -m pytest -q tests`
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:3000, API http://localhost:8000/docs
