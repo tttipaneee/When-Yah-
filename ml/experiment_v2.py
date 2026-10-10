@@ -16,7 +16,8 @@ predicted moves (|pred| >= 5%) turned out.
 Added 11 Oct AFTER the first run (post hoc, disclosed in the report): the first run's TEST and SEPTEMBER results showed
 the raw line overstating big moves (predicted -17% -> actual median -11%), so neither is an untouched holdout for the
 calibrated line. An isotonic map predicted -> observed MEDIAN ratio is fit on VAL days per variant/horizon (a first
-version fit the mean and shifted every forecast ~+0.5 points; replaced after the leakage audit). The calibrated line is served only if it passes the SAME rule above on test days and
+version fit the mean and shifted every forecast ~+0.5 points; a second used quantile bins and capped drops at ~-4%;
+the served map uses fixed 1-point bins, all fit on val only). The calibrated line is served only if it passes the SAME rule above on test days and
 September; otherwise the raw v2 line (if it passed) is served.
 Usage: python -m ml.experiment_v2 [data/raw/fhvhv_tripdata_2024-09.parquet]
 """
@@ -202,8 +203,8 @@ def main() -> None:
         return out
 
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-    dirty = subprocess.run(["git", "status", "--porcelain", "ml/"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-    commit += " + UNCOMMITTED changes in ml/" if dirty else ""
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", "ml/*.py"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+    commit += " + UNCOMMITTED changes in ml/*.py" if dirty else ""
     head = ["| Variant | Horizon | MAE persistence | MAE v1 | MAE v2 raw | MAE v2 calibrated | calibrated vs v1 | "
             "calibrated vs persistence | served band p10–p90 coverage (nominal 80%) |", "|---|---|---|---|---|---|---|---|---|"]
 

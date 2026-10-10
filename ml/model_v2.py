@@ -73,14 +73,24 @@ def serve_rows(row: pd.DataFrame, local_dt, table: pd.Series, rel_level: float |
     return out
 
 
-def fit_median_cal(pred: np.ndarray, y: np.ndarray, bins: int = 50):
-    """Isotonic map predicted -> observed MEDIAN ratio (quantile bins of the prediction, weighted by size), so it keeps
-    the l1 model's 'typical outcome' meaning (a plain isotonic fit estimates the mean and shifted every forecast
-    ~+0.5 points: leakage audit 11 Oct)."""
+def fit_median_cal(pred: np.ndarray, y: np.ndarray, step: float = 0.01, min_n: int = 30):
+    """Isotonic map predicted -> observed MEDIAN ratio, on fixed 1-point bins of the prediction (merged until each has
+    >= min_n windows, weighted by size), so it keeps the l1 model's 'typical outcome' meaning (a plain isotonic fit
+    estimates the mean and shifted every forecast ~+0.5 points; quantile bins pooled all rare big moves into one bin
+    and capped drops at ~-4%: leakage audit / rerun, 11 Oct)."""
     from sklearn.isotonic import IsotonicRegression
-    d = pd.DataFrame({"p": pred, "y": y})
-    g = d.groupby(pd.qcut(d.p, bins, duplicates="drop"), observed=True)
-    return IsotonicRegression(out_of_bounds="clip").fit(g.p.median(), g.y.median(), sample_weight=g.size())
+    d = pd.DataFrame({"p": pred, "y": y}).sort_values("p")
+    d["b"] = np.floor(d.p / step)
+    xs, ys, ws, cur = [], [], [], []
+    for _, g in d.groupby("b", sort=True):
+        cur.append(g)
+        if sum(len(c) for c in cur) >= min_n:
+            m = pd.concat(cur)
+            xs.append(m.p.median()); ys.append(m.y.median()); ws.append(len(m)); cur = []
+    if cur and xs:  # leftover tail merges into the last bin
+        m = pd.concat(cur + [d[d.p >= xs[-1]]])
+        xs[-1], ys[-1], ws[-1] = m.p.median(), m.y.median(), len(m)
+    return IsotonicRegression(out_of_bounds="clip").fit(xs, ys, sample_weight=ws)
 
 
 def predict_line(m: dict, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
