@@ -106,6 +106,8 @@ Fill in as they're created; keep them working.
   `HERE_KM + 0.2` km from the venue toward the drop-off (if outside the circle), else away from the venue through the
   pickup, else `null`; `walk_km` = straight line pickup → target. Words + map only, never a price % (the post-event rise
   is validated for NYC baseball only). "Show me on the map" zooms to the circle, pickup and a "Check prices here" point.
+  "Make this my pickup" (or tapping that point) moves the pickup there (street name from OSM Nominatim reverse lookup,
+  else "Walk-out point"), clears the typed prices (they were for the old spot) and returns to the price field.
 - Presenter time: `?at=YYYY-MM-DDTHH:MM` in the web URL runs the forecast and that day's events at that KL time
   (e.g. `?at=2026-10-11T22:40` shows Option 2 for the Zepp KL concert ending 23:00).
 - `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-sonnet-5-5`, effort low, runs automatically as the "Why" text,

@@ -163,7 +163,8 @@ export default function App() {
     if(wo && wo.target && wp) {  // Option 2: walk from the pickup to just outside the circle
       L.polyline([[wp.lat, wp.lon], [wo.target.lat, wo.target.lon]], {color: "#101410", weight: 4, dashArray: "1 9", lineCap: "round"}).addTo(bigLayers);
       L.circleMarker([wo.target.lat, wo.target.lon], {radius: 10, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 3}).addTo(bigLayers)
-        .bindTooltip("Check prices here", {permanent: true, direction: "top", className: "map-label", offset: [0, -12]});
+        .bindTooltip("Check prices here · tap to set as pickup", {permanent: true, direction: "top", className: "map-label", offset: [0, -12]})
+        .on("click", function(){ useWalkOut(); });
     }
     var ne = nearEvents()[0];
     if(WALK_FOCUS && wo && wo.target && wp) {  // opened from Option 2: just the circle, the pickup and the walk-out point
@@ -450,6 +451,28 @@ export default function App() {
       (w.walk_km!=null?"Walk about "+w.walk_km+" km, out of the orange circle":"Walk out of the orange circle ("+w.radius_km+" km around "+w.venue+")")+
       ", then check prices again.";
   }
+  // "Make this my pickup": move the pickup to the walk-out point (named by OSM reverse lookup), clear the old
+  // prices (they were for the old spot) and go back to the price field to check the apps from there
+  var WALK_BUSY=false;
+  function useWalkOut(){
+    var w=MODEL&&MODEL.walk_out;if(!w||!w.target||WALK_BUSY)return;
+    WALK_BUSY=true;var t=w.target,done=false;
+    function apply(name){
+      if(done)return;done=true;WALK_BUSY=false;
+      PLACE_LATLON[name]={lat:t.lat,lon:t.lon};state.from=name;state.fromLatLon=null;
+      state.quotes=state.quotes.map(function(q){return {app:q.app,price:0}});
+      if($("fs").classList.contains("on"))closeFs(true);
+      closeRes(true);syncFields(true);renderQuotes();renderPrediction();drawBig();
+      setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},260);
+      toast("Pickup moved. Check your apps from there");
+    }
+    setTimeout(function(){apply("Walk-out point")},2500);  // no answer from the map service: plain name
+    fetch("https://nominatim.openstreetmap.org/reverse?format=json&zoom=17&lat="+t.lat+"&lon="+t.lon)
+      .then(function(r){return r.json()})
+      .then(function(d){var a=d&&d.address||{};apply(a.road||a.pedestrian||a.neighbourhood||(d&&d.name)||"Walk-out point")})
+      .catch(function(){apply("Walk-out point")});
+  }
+  $("walkUse").onclick=useWalkOut;
   $("walkMap").onclick=function(){WALK_FOCUS=true;closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
   function countTo(el,to){  // ring number counts up instead of jumping
     if(to==null){el.textContent="–";el.dataset.v="";return}
@@ -993,7 +1016,10 @@ export default function App() {
             <h2 id="walkT">Walk out of the zone</h2>
             <p id="walkText"></p>
           </div>
-          <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
+          <div className="walk-acts">
+            <button className="walk-go" id="walkUse" type="button">Make this my pickup</button>
+            <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
+          </div>
         </section>
 
         <section className="card" aria-labelledby="rt">
