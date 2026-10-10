@@ -125,6 +125,14 @@ export function klTime(iso: string): string {
   return d.toISOString().slice(11, 16)
 }
 
+/** Estimated usual price for the route (/api/usual): Grab published rates x route (rough unless the fare check passed)
+ * and the model's usual-for-this-hour factor. Used by the forecast only when no usual price is typed. */
+export function fetchUsual(a: { lat: number; lon: number }, b: { lat: number; lon: number }): Promise<any> {
+  const q = new URLSearchParams({ from_lat: String(a.lat), from_lon: String(a.lon), to_lat: String(b.lat),
+    to_lon: String(b.lon), at: kualaLumpurNowIso() })
+  return fetch(`/api/usual?${q}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+}
+
 /** Trip time with traffic for the map before any forecast (/api/route, TomTom, one call); nulls without a key. */
 export function fetchRouteNow(a: { lat: number; lon: number }, b: { lat: number; lon: number }): Promise<any> {
   const q = new URLSearchParams({ from_lat: String(a.lat), from_lon: String(a.lon), to_lat: String(b.lat),

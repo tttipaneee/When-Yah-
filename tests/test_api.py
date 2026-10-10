@@ -321,3 +321,15 @@ def test_outlook_matches_horizon_and_follows_v2_verdict():
         assert not any("traffic" in w for w in o["because"])
         assert d["reasons"][1].startswith("Price in 30 min")
     assert d["reasons"][0].startswith("Chance that waiting 30 min")  # contract: reasons[0] = the odds
+
+
+def test_usual_endpoint_shape(monkeypatch):
+    import api.routes.forecast as rf
+    est = {"rm": 16.62, "km": 12.8, "min": 27, "source": "Grab published rates + TomTom route — rough", "validated": False,
+           "median_abs_error": 0.176, "n_quotes": 9}
+    monkeypatch.setattr(rf, "_usual", lambda *a: est)
+    d = client.get("/api/usual", params=dict(from_lat=3.158, from_lon=101.7117, to_lat=3.1177, to_lon=101.6774,
+                                             at="2026-10-09T17:30:00+08:00")).json()
+    assert d["rm"] == 16.62 and d["validated"] is False
+    if "time_factor" in d:  # model v2 served: usual price at this hour = formula x the model's hour/weekday factor
+        assert d["rm_at_this_time"] == round(16.62 * d["time_factor"], 2)

@@ -88,6 +88,10 @@ Fill in as they're created; keep them working.
 - `GET /api/route?from_lat&from_lon&to_lat&to_lon[&at]` → `{km, minutes, source}` (nulls without a TomTom key): trip time
   with traffic for leaving now (or a future `at`), one TomTom call cached per minute, so the map shows it before any
   forecast; after a forecast for the same route, the forecast's `traffic` is used. Minutes only.
+- `GET /api/usual?from_lat&from_lon&to_lat&to_lon[&at]` → `usual_price_estimate` fields + `time_factor`, `rm_at_this_time`,
+  `time_source` (model v2's usual-for-this-hour/weekday factor, reports/metrics_v2.md) | `{rm: null}`: shown on the price
+  card as soon as both places are set ("Usual ≈ RM X · at this hour ≈ RM Y", rough label, also the field's placeholder).
+  The forecast uses the formula value only.
 - Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source, validated,
   median_abs_error, n_quotes}` (Grab Jan 2023 rates + TomTom route, else OSM route). If the user typed no usual price,
   it is used as the usual price (product decision, Ravin 11 Oct) — `validated: false` while `reports/fare_check.json`
