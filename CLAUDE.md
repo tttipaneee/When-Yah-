@@ -42,6 +42,7 @@ Fill in as they're created; keep them working.
 - Weather (NOAA Central Park hourly): `python ml/fetch_weather.py` → `data/weather/nyc_central_park_2024-08.csv`
 - Check data signal (go/no-go): `python ml/check_signal_nyc.py data/raw/fhvhv_tripdata_2024-08.parquet`
 - Build dataset / train / evaluate: `python ml/build_dataset.py && python -m ml.train && python -m ml.evaluate` (→ `reports/metrics.md`)
+- Event effect: `python -m ml.event_effect` (→ `reports/event_effect.md`)
 - API tests: `python -m pytest -q tests`
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
 
