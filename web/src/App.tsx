@@ -375,8 +375,24 @@ export default function App() {
       .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats();aiReset();if(EARN_PENDING){EARN_PENDING=false;awardForecast()}})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
+  // "Why" in three short lines, built from fields this forecast already shows (ring, chart, events): no new numbers
+  function renderWhyLines(I){
+    var o=MODEL.wait_odds,us=Math.round(o.typical_p_save10*100),L=[],wait=MODEL.decision==="wait";
+    var h=wait?MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0]:null;
+    var line=function(icon,html){return '<div class="wl"><span class="wi">'+ic(I[icon])+'</span><p>'+html+'</p></div>'};
+    if(wait)L.push(line("clock","<b>"+Math.round(h.p_drop10*100)+"%</b> chance it's 10%+ cheaper by "+hhmm(MODEL.wait_minutes)+" (usually "+us+"%)"));
+    else L.push(line("clock","Only <b>"+Math.round(o.p_save10*100)+"%</b> chance it's 10%+ cheaper in 30 min (usually "+us+"%)"));
+    if(MODEL.traffic&&MODEL.traffic.jam_ahead)L.push(line("car","Traffic jam coming: the trip gets slower later"));
+    else if(wait)L.push(line("tag","Expected to ease off by "+hhmm(MODEL.wait_minutes)));
+    else L.push(line("tag",o.pct_high<0?"Likely lower in 30 min, but not by much":o.pct_low>0?"Likely higher in 30 min":"In 30 min it could go either way"));
+    var e=(MODEL.events||[])[0];
+    if(e)L.push(line("cal",esc(e.level==="right_here"?"Event right here":"Event nearby")+": "+esc(e.name)+
+      '. Effect on prices here not measured. <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a>'));
+    $("whyLines").innerHTML=L.join("");
+    $("wt").textContent=wait?"Why wait":"Why book now";
+  }
   function realOnly(){
-    if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
+    if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';$("whyLines").innerHTML="";return}
     // reasons → short icon rows; the odds and "Wait" reasons are already on the decision card
     var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',car:'<path d="M5 16v-5l1.7-4.5A2 2 0 0 1 8.6 5h6.8a2 2 0 0 1 1.9 1.5L19 11v5M5 16h14M5 16v2.5M19 16v2.5"/>',
       rain:'<path d="M7 15a4 4 0 1 1 1.2-7.8A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/>',
@@ -400,6 +416,7 @@ export default function App() {
       return row("cal",lv+(e.km!=null?" · "+e.km.toFixed(1)+" km":""),e.name,'<small><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</small>')}).join("");
     html+='<div class="why-src">Model '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
     $("why").innerHTML=html;
+    renderWhyLines(I);
     renderFareReport();
   }
   function renderPrediction(fromModel){
@@ -432,7 +449,7 @@ export default function App() {
   $("dAct").onclick=function(){
     if(MODEL&&MODEL.decision==="wait"){closeRes(true);setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},240);return}
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
-    setTimeout(function(){var a=$("fareApp")||$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
+    setTimeout(function(){var a=$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
   $("walkMap").onclick=function(){closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
   function countTo(el,to){  // ring number counts up instead of jumping
@@ -576,16 +593,25 @@ export default function App() {
     var el=$("fareReport");if(!el)return;
     if(!MODEL){FARE_KEY="";el.innerHTML='<div class="empty">Run a forecast first.</div>';return}
     var key=JSON.stringify([state.from,state.to,state.quotes,state.usual,state.rain]);  // one report per forecast input
-    if(key===FARE_KEY)return;  // same forecast: keep what the user is typing
-    FARE_KEY=key;
+    var quoted=Object.keys(APP_NAME).filter(function(a){return MODEL.horizon[0].expected_rm[a]!=null});
+    // redraw only when the forecast or its quoted apps change (a late response can add an app), else keep the typing
+    if(key+quoted.join()===FARE_KEY)return;
+    FARE_KEY=key+quoted.join();
     var done=fareList().filter(function(f){return f.key===key})[0];
     if(done){el.innerHTML=fareThanks(done);return}
-    var quoted=Object.keys(APP_NAME).filter(function(a){return MODEL.horizon[0].expected_rm[a]!=null});
     var apps=quoted.length?quoted:Object.keys(APP_NAME);
-    el.innerHTML='<form class="fare-form" id="fareForm">'+
-      '<label>App<select id="fareApp">'+apps.map(function(a){return '<option value="'+a+'">'+APP_NAME[a]+'</option>'}).join("")+'</select></label>'+
-      '<label>What you paid (RM)<input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="e.g. 18.50" required></label>'+
-      '<button class="go" type="submit">Save fare</button></form>';
+    // same app switch + price-tag field as the home price card; saved in this browser only
+    el.innerHTML='<form class="fare2" id="fareForm" novalidate><input type="hidden" id="fareApp" value="'+apps[0]+'">'+
+      '<div class="qchips" role="group" aria-label="App you booked" style="grid-template-columns:repeat('+apps.length+',minmax(0,1fr))">'+apps.map(function(a,i){
+        return '<button type="button" class="qchip" data-fare-app="'+a+'" aria-pressed="'+(i===0)+'"><span class="qname">'+appLogo(APP_NAME[a])+APP_NAME[a]+'</span></button>'}).join("")+'</div>'+
+      '<label class="qbig" for="farePaid"><span class="qq">Paid on <b id="fareAppName">'+APP_NAME[apps[0]]+'</b></span>'+
+      '<span class="qamt"><span>RM</span><input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="0.00"></span></label>'+
+      '<button class="go" type="submit">Save fare · +25 pts</button></form>';
+    el.querySelector(".qchips").onclick=function(ev){
+      var b=ev.target.closest("button[data-fare-app]");if(!b)return;
+      el.querySelectorAll("[data-fare-app]").forEach(function(x){x.setAttribute("aria-pressed",String(x===b))});
+      $("fareApp").value=b.dataset.fareApp;$("fareAppName").textContent=APP_NAME[b.dataset.fareApp];$("farePaid").focus({preventScroll:true});
+    };
     $("fareForm").onsubmit=function(ev){
       ev.preventDefault();
       var app=$("fareApp").value,paid=parseFloat($("farePaid").value);
@@ -736,10 +762,9 @@ export default function App() {
   // Runs by itself when the forecast screen shows a result; one call per forecast input (cached), shortly
   // after typing stops. If AI is unavailable or rejected, the Details rows open instead.
   var AI_KEY="",AI_CACHE={},AI_T=null;
-  function aiShow(r){
-    var d=document.querySelector(".why-details");
-    if(r&&r.ai&&r.text){$("aiOut").innerHTML='<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>';if(d)d.open=false}
-    else{$("aiOut").innerHTML='';if(d)d.open=true}
+  function aiShow(r){  // AI text sits under "Read the full explanation"; without it, the detail rows there are enough
+    if(r&&r.ai&&r.text)$("aiOut").innerHTML='<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>';
+    else $("aiOut").innerHTML='';
   }
   function aiReset(){
     if(!MODEL||!$("res").classList.contains("on"))return;
@@ -990,15 +1015,15 @@ export default function App() {
           <div className="legend"><span><i style={{width:"14px",height:"3px",background:"#101410",borderRadius:"2px"}}></i>Expected</span><span><i style={{width:"14px",height:"10px",background:"rgba(196,241,53,.6)",borderRadius:"3px"}}></i>Likely range</span><span><i style={{width:"10px",height:"10px",background:"#C4F135",border:"2px solid #101410",borderRadius:"50%"}}></i>Best time</span></div>
         </section>
 
-        <details className="card why-card">
-          <summary><h2 id="wt">Why this advice</h2></summary>
-          <div id="aiOut" aria-live="polite"></div>
-          <details className="why-details"><summary>Details</summary><div className="why2" id="why"></div></details>
-        </details>
+        <section className="card why-card" aria-labelledby="wt">
+          <h2 id="wt">Why</h2>
+          <div className="wlines" id="whyLines"></div>
+          <details className="why-more"><summary>Read the full explanation</summary><div id="aiOut" aria-live="polite"></div><div className="why2" id="why"></div></details>
+        </section>
 
         <section className="card" aria-labelledby="ft">
           <div className="card-head">
-            <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved only on this phone. It helps us check our forecasts in Malaysia.</p></div>
+            <div><h2 id="ft">What did you pay?</h2></div>
           </div>
           <div id="fareReport"></div>
         </section>

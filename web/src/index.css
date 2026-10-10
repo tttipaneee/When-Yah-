@@ -268,11 +268,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .decide .chip.urg.urgent{background:#F26B1D;color:#fff}
 .decide .chip.urg.wait{background:#101410;color:#C4F135}
 
-/* fare report */
-.fare-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
-.fare-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700}
-.fare-form select,.fare-form input{font:inherit;font-size:15px;padding:10px;border:2px solid #101410;border-radius:12px;background:#fff;min-width:0}
-.fare-form .go{grid-column:1/-1}
 
 /* points chip + leaderboard */
 .top-chips{display:flex;gap:6px;align-items:center}
@@ -333,11 +328,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .ai-btn{width:100%;justify-content:center;gap:8px}
 .ai-text{margin:10px 0 4px;font-size:14px;line-height:1.5;font-weight:500}
 .ai-wait{opacity:.55;font-style:italic}
-.why-details{margin-top:10px}
-.why-details summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--mute);list-style:none;padding:6px 0}
-.why-details summary::before{content:'+ '}
-.why-details[open] summary::before{content:'– '}
-.why-details .why2{margin-top:8px}
 
 /* brand */
 .logo{border-radius:12px;background:none;width:40px;height:40px}
@@ -449,12 +439,6 @@ button.opt:active{transform:scale(.98)}
 .walk-btn{grid-column:1/-1;height:44px;border-radius:999px;border:1.5px solid var(--lime);color:var(--lime);font-weight:800;font-size:14px;transition:background .15s,color .15s}
 .walk-btn:hover{background:var(--lime);color:var(--ink)}
 .walk-btn:focus-visible{outline-color:var(--lime)}
-.why-card{gap:0}
-.why-card>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
-.why-card>summary::-webkit-details-marker{display:none}
-.why-card>summary::after{content:"+";font-size:20px;font-weight:800;line-height:1}
-.why-card[open]>summary::after{content:"–"}
-.why-card[open]>summary{margin-bottom:8px}
 
 /* ---------- leaderboard: friends map (tilted 3D, Snapchat-style avatar bubbles) ---------- */
 .lb-mapcard{margin:0 0 14px}
@@ -473,3 +457,20 @@ button.opt:active{transform:scale(.98)}
 .qsmall .qamt span{font-size:14px;margin-top:6px}
 .qsmall .qamt input{font-size:30px;-moz-appearance:textfield}
 .qsmall .qamt input::-webkit-outer-spin-button,.qsmall .qamt input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* Why: three short lines + the full explanation folded; fare report reuses the home price field */
+.why-card{gap:10px}
+.wlines{display:flex;flex-direction:column}
+.wl{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--line)}
+.wl:first-child{border-top:0;padding-top:2px}
+.wl .wi{width:30px;height:30px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--ink)}
+.wl p{margin:5px 0 0;font-size:13.5px;font-weight:600;line-height:1.35}
+.wl p b{font-weight:800}
+.wl a{color:var(--ink);font-weight:800}
+.why-more summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--mute);padding:4px 0}
+.why-more summary::-webkit-details-marker{display:none}
+.why-more summary::after{content:" ›"}
+.why-more[open] summary::after{content:" ⌄"}
+.why-more .why2{margin-top:8px}
+.fare2{display:flex;flex-direction:column;gap:14px}
+.fare2 .qamt input{font-size:40px}
