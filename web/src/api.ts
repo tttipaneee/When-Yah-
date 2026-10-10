@@ -20,6 +20,8 @@ export interface WaitOdds {
 export interface ForecastEvent {
   name: string; source_url: string
   learned_effect: { pct: number; window: string } | null
+  km?: number | null
+  level?: "right_here" | "in_area" | null
 }
 export interface ForecastResponse {
   datetime: string

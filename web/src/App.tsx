@@ -30,7 +30,8 @@ export default function App() {
   var PDROP=0;
   var MODEL=null,MODEL_ERR=null;
   var REAL_EVENTS=[],EVENTS_LOADED=false;  // real events today from /api/events (each with source_url)
-  var NEAR_KM=5;
+  var NEAR_KM=5;   // "event in the area": product choice, information only
+  var HERE_KM=1;   // "event right here": ~ the venue's own taxi zone where NYC data measured post-event effects
   var EVENT={
     at:"Axiata Arena",r:46,
     name:"Example concert",
@@ -215,7 +216,8 @@ export default function App() {
       L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
     }
     if(v) {
-      L.circleMarker([v.lat, v.lon], {radius: 7, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.9, weight: 2}).addTo(miniLayers);
+      L.circle([v.lat, v.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.15, weight: 1, dashArray: "4 4"}).addTo(miniLayers);
+      L.circleMarker([v.lat, v.lon], {radius: 6, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(miniLayers);
     }
   }
   function drawBig(){
@@ -241,6 +243,8 @@ export default function App() {
         }).catch(e => console.error(e));
     }
     REAL_EVENTS.forEach(function(e){  // real venues today (source-linked in the event sheet)
+      var ring = L.circle([e.lat, e.lon], {radius: HERE_KM*1000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.12, weight: 1.5, dashArray: "6 6"}).addTo(bigLayers);
+      ring.on("click", function(){ openZone($("zoneChip")); });
       var mk = L.circleMarker([e.lat, e.lon], {radius: 9, color: "#101410", fillColor: "#F26B1D", fillOpacity: 0.95, weight: 2}).addTo(bigLayers);
       mk.bindTooltip(e.name.length > 28 ? e.name.slice(0, 27) + "…" : e.name, {direction: "top", offset: [0, -8]});
       mk.on("click", function(){ openZone($("zoneChip")); });
@@ -451,8 +455,10 @@ export default function App() {
     $("opts").querySelectorAll('[data-go="transit"]').forEach(function(n){n.remove()});
     var wc=$("wt").closest(".card"),tg=wc&&wc.querySelector(".tag");if(tg)tg.hidden=true;
     if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
-    var html=MODEL.reasons.filter(function(t){return t.indexOf("Event nearby:")!==0}).map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
-    html+=MODEL.events.map(function(e){return '<div><div class="why-top"><span>Event nearby: '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured for Malaysian events</div></div>'}).join("");
+    var html=MODEL.reasons.filter(function(t){return !/^Event (right here|in the area|today|nearby)/.test(t)}).map(function(t){return '<div><div class="why-top"><span>'+esc(t)+'</span></div></div>'}).join("");
+    html+=MODEL.events.map(function(e){
+      var lv=e.level==="right_here"?"Event right here":e.level==="in_area"?"Event in the area":"Event today";
+      return '<div><div class="why-top"><span>'+lv+(e.km!=null?' ('+e.km.toFixed(1)+' km)':'')+': '+esc(e.name)+'</span></div><div class="why-src"><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</div></div>'}).join("");
     html+='<div class="why-src">Source: '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
     $("why").innerHTML=html;
   }
@@ -660,24 +666,26 @@ export default function App() {
     if(!EVENTS_LOADED){t.textContent="Loading real events…";return}
     if(near.length){
       var e=near[0];
-      t.textContent=e.name+" · "+e.venue+" · "+evWhen(e)+" · "+e.km.toFixed(1)+" km from your pickup"+(near.length>1?" (+"+(near.length-1)+" more)":"");
+      t.textContent=(e.km<=HERE_KM?"Right here: ":"In the area: ")+e.name+" · "+e.venue+" · "+evWhen(e)+" · "+e.km.toFixed(1)+" km from your pickup"+(near.length>1?" (+"+(near.length-1)+" more)":"");
     }else t.textContent=REAL_EVENTS.length?"No events within "+NEAR_KM+" km of your pickup today · "+REAL_EVENTS.length+" in Klang Valley":"No events listed for today";
     if(g)g.textContent=REAL_EVENTS.length?REAL_EVENTS.length+" today":"Today";
-    $("chipText").textContent=near.length?"Event nearby · "+near[0].name:"Events today · "+REAL_EVENTS.length;
+    $("chipText").textContent=near.length?(near[0].km<=HERE_KM?"Event right here · ":"Event in the area · ")+near[0].name:"Events today · "+REAL_EVENTS.length;
   }
   function renderZoneSheet(){
     // Real events today with sources; no price effect is shown (only validated for NYC baseball)
     var a=pickupLL(),list=REAL_EVENTS.map(function(e){return Object.assign({km:a?kmBetween(a,e):null},e)})
       .sort(function(x,y){return (x.km==null?1e9:x.km)-(y.km==null?1e9:y.km)});
     var head='<div class="zs-head"><div><div class="zs-eyebrow"><span class="k2">Event radar</span><span class="tag">Real events</span></div>'+
-      '<h3 id="zsTitle">Events today</h3><div class="zs-meta">Near '+esc(state.from)+' · within '+NEAR_KM+' km is marked</div></div>'+
+      '<h3 id="zsTitle">Events today</h3><div class="zs-meta">From '+esc(state.from)+' · right here ≤ '+HERE_KM+' km · in the area ≤ '+NEAR_KM+' km</div></div>'+
       '<button class="x" id="zsClose" type="button" aria-label="Close event list"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>';
     var rows=list.length?list.map(function(e){
-      var near=e.km!=null&&e.km<=NEAR_KM;
-      return '<div class="zs-status '+(near?'in':'out')+'">'+(near?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
-        (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
+      var here=e.km!=null&&e.km<=HERE_KM,area=e.km!=null&&e.km<=NEAR_KM;
+      var lvl=here?"Right here (within "+HERE_KM+" km)":area?"In the area (within "+NEAR_KM+" km)":"Further away";
+      return '<div class="zs-status '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
+        (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><small>'+lvl+'</small> · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
     }).join(""):'<div class="empty">No real events listed for today.</div>';
-    var note='<div class="zs-sec"><p class="sub">Events can push prices up nearby, but we have not measured that for Malaysia, so no % is shown. '+
+    var note='<div class="zs-sec"><p class="sub">The dashed '+HERE_KM+' km circle on the map is about the area where our New York data saw prices '+
+      'rise right after games (Yankee Stadium, its own taxi zone). It has not been measured in Malaysia, so no % is shown. '+
       'Each event links to its source.</p></div>';
     var acts='<div class="zs-acts"><button class="go" id="zsForecast" type="button">See forecast</button><button class="ghost" id="zsGot" type="button">Got it</button></div>';
     $("zsBody").innerHTML=head+rows+note+acts;

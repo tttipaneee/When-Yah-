@@ -16,7 +16,7 @@ from statistics import median
 import joblib
 from fastapi import HTTPException
 
-from api.events import events_near
+from api.events import events_near, haversine_km
 from api.fare import estimate as fare_estimate
 from api.traffic import predicted_minutes
 from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, TrafficInfo, WaitOdds
@@ -80,6 +80,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
 
 
 KL = ZoneInfo("Asia/Kuala_Lumpur")
+HERE_KM = 1.0  # "right here": about the venue's own NYC taxi zone (~0.75-1.3 km), where the effect was measured
 JAM_FACTOR = 1.25  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
@@ -195,10 +196,17 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
-    events = [ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None) for e in nearby]
-    ev_reasons = [f"Event nearby: {e.name}" + (" — in New York data, prices near a baseball stadium rose right "
-                                              "after games; not measured for Malaysian events" if eff else
-                                              " (effect on price not validated)") for e in nearby]
+    pk = (req.pickup.lat, req.pickup.lon) if req.pickup else None
+    events, ev_reasons = [], []
+    for e in nearby:
+        km = round(haversine_km(pk[0], pk[1], e.lat, e.lon), 1) if pk else None
+        lvl = None if km is None else ("right_here" if km <= HERE_KM else "in_area")
+        events.append(ForecastEvent(name=e.name, source_url=e.source_url, learned_effect=None, km=km, level=lvl))
+        where = (f"Event right here ({km:.1f} km)" if lvl == "right_here" else
+                 f"Event in the area ({km:.1f} km)" if lvl else "Event today")
+        ev_reasons.append(f"{where}: {e.name}" + (
+            " — in New York data, prices in a stadium's own area (~1 km) rose right after games; not measured for "
+            "Malaysian events" if (eff and lvl == "right_here") else " (effect on price not measured in Malaysia)"))
     reasons += ev_reasons
     reasons.append("Model learned from NYC Uber/Lyft trips (Aug 2024), applied to your local time")
     return ForecastResponse(

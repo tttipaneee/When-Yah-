@@ -47,6 +47,8 @@ class ForecastEvent(BaseModel):
     name: str
     source_url: str
     learned_effect: LearnedEffect | None = None
+    km: float | None = None        # distance from the pickup
+    level: str | None = None       # "right_here" (<= 1 km) | "in_area" (<= 5 km)
 
 
 class WaitOdds(BaseModel):

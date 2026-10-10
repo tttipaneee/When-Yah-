@@ -146,3 +146,13 @@ def test_no_tomtom_key_means_no_traffic(monkeypatch):
     from api.traffic import predicted_minutes
     monkeypatch.delenv("TOMTOM_API_KEY", raising=False)
     assert predicted_minutes((3.158, 101.7117), (3.1177, 101.6774), __import__("datetime").datetime.now()) is None
+
+
+def test_event_levels_right_here_and_in_area():
+    sat = {**BODY, "datetime": "2026-10-10T19:30:00+08:00"}
+    here = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0537311, "lon": 101.6934618}}).json()
+    e = next(x for x in here["events"] if "MAMAMOO" in x["name"])
+    assert e["level"] == "right_here" and e["km"] <= 1.0
+    area = client.post("/api/forecast", json={**sat, "pickup": {"lat": 3.0763304, "lon": 101.7111343}}).json()
+    e = next(x for x in area["events"] if "MAMAMOO" in x["name"])  # Bandar Tasik Selatan, ~3 km away
+    assert e["level"] == "in_area" and 1.0 < e["km"] <= 5.0
