@@ -150,7 +150,13 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:
-        reasons.append("Odds of a drop are not clearly above usual — book now")
+        rise = max(horizon, key=lambda h: h.pct_change)
+        if rise.pct_change >= 0.015:  # model expects the price to edge up (e.g. toward the evening peak)
+            reasons.append(f"Book now: the model expects the price to edge up by +{rise.minutes} min "
+                           f"({rise.pct_change:+.0%}, likely {rise.pct_low:+.0%} to {rise.pct_high:+.0%}) — "
+                           "a time-of-day pattern learned from NYC data; it can't see live KL traffic")
+        else:
+            reasons.append("Odds of a drop are not clearly above usual — book now")
     reasons.append("rain" if req.rain else "no rain")
     # Re-audit: the validated effect is NYC baseball at one venue; it is never applied to Malaysian events
     eff = event_effect()
