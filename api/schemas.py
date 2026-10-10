@@ -23,6 +23,7 @@ class ForecastRequest(BaseModel):
     pickup: LatLon | None = None
     quotes: list[Quote] = []
     usual_price_rm: float | None = Field(default=None, gt=0)
+    dropoff: LatLon | None = None  # with pickup: route-based usual-price estimate (only if fare check passed)
 
 
 class HorizonPoint(BaseModel):
@@ -55,6 +56,13 @@ class WaitOdds(BaseModel):
     rm_range: dict[str, list[float]] = {}  # per quoted app: [low, high] RM at `minutes`
 
 
+class UsualPriceEstimate(BaseModel):
+    rm: float
+    km: float
+    min: float
+    source: str
+
+
 class ForecastResponse(BaseModel):
     datetime: datetime
     horizon: list[HorizonPoint]
@@ -69,6 +77,7 @@ class ForecastResponse(BaseModel):
     events: list[ForecastEvent] = []
     reasons: list[str]
     model_version: str
+    usual_price_estimate: UsualPriceEstimate | None = None  # null unless reports/fare_check.json passed
     evidence: dict[str, str]
 
 

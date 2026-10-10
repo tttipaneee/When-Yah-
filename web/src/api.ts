@@ -7,6 +7,7 @@ export interface ForecastRequest {
   pickup: { lat: number; lon: number } | null
   quotes: Quote[]
   usual_price_rm: number | null
+  dropoff?: { lat: number; lon: number } | null
 }
 export interface HorizonPoint {
   minutes: number; pct_change: number; pct_low: number; pct_high: number; p_drop10: number
@@ -34,6 +35,7 @@ export interface ForecastResponse {
   events: ForecastEvent[]
   reasons: string[]
   model_version: string
+  usual_price_estimate: { rm: number; km: number; min: number; source: string } | null
   evidence: Record<string, string>
 }
 export interface EventItem {

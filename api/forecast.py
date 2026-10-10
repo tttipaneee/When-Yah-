@@ -17,6 +17,7 @@ import joblib
 from fastapi import HTTPException
 
 from api.events import events_near
+from api.fare import estimate as fare_estimate
 from api.schemas import ForecastEvent, ForecastRequest, ForecastResponse, HorizonPoint, WaitOdds
 from ml.features import LEVEL_RANGE, serve_row
 
@@ -84,6 +85,11 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # (naive times are taken as KL time), so hour/weekday features and event dates are right.
     dt = req.datetime.astimezone(KL) if req.datetime.tzinfo else req.datetime.replace(tzinfo=KL)
     req = req.model_copy(update={"datetime": dt})
+    est = None
+    if req.pickup and req.dropoff:
+        est = fare_estimate((req.pickup.lat, req.pickup.lon), (req.dropoff.lat, req.dropoff.lon))
+        if est and req.usual_price_rm is None:  # a typed usual price always wins
+            req = req.model_copy(update={"usual_price_rm": est["rm"]})
     quotes = {q.app: q.price_rm for q in req.quotes}  # last quote per app wins
     nearby = events_near(req.datetime, req.pickup.lat if req.pickup else None,
                          req.pickup.lon if req.pickup else None)
@@ -154,5 +160,6 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         apps_ranked_now=_rank(quotes), apps_ranked_best_time=_rank(at_best),
         events=events, reasons=reasons,
         model_version=f"lgbm_v1/{variant}",
+        usual_price_estimate=est,
         evidence={"metrics": "reports/metrics.md", "event_effect": "reports/event_effect.md"},
     )

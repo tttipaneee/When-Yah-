@@ -81,3 +81,11 @@ def test_time_is_read_in_kl_whatever_timezone_was_sent():
     utc = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-10T07:22:00Z", "usual_price_rm": 20}).json()
     assert kl["wait_odds"] == utc["wait_odds"]
     assert utc["datetime"].endswith("+08:00")
+
+
+def test_usual_price_estimate_only_when_fare_check_passed():
+    from api.fare import check
+    body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
+    d = client.post("/api/forecast", json=body).json()
+    if not check().get("passed"):
+        assert d["usual_price_estimate"] is None and d["model_version"] == "lgbm_v1/no_level"

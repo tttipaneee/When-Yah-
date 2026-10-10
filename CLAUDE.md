@@ -48,6 +48,7 @@ Fill in as they're created; keep them working.
 - Borough experiment: `python -m ml.experiment_borough` (→ `reports/borough_experiment.md`; zone→borough from `data/zones/taxi_zones_borough.csv`, NYC Open Data taxi zones export 2025-10-03)
 - Traffic: `python -m ml.traffic && python -m ml.experiment_traffic` (→ `reports/traffic_experiment.md`)
 - Extreme-price calibration: `python -m ml.experiment_extreme` (→ `reports/extreme_experiment.md`)
+- Fare check (needs real off-peak quotes in `data/fares/offpeak_quotes.csv`): `python -m ml.fare_check` (→ `reports/fare_check.md`, gate for `usual_price_estimate`)
 - API tests: `python -m pytest -q tests`
 - Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
 
@@ -72,6 +73,9 @@ Fill in as they're created; keep them working.
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
 - `decision` = `wait` (30 min) only if `reports/decision.json` has `validated: true` **and** the odds are ≥ k × usual;
   currently not validated, so always `book_now` (reasons explain why).
+- Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
+  as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
+  route) and the user typed none; otherwise `usual_price_estimate: null`.
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "contoh…", request, response}]` (real forecast, example prices).
 - `expected_rm`, savings, `rm_range` and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
