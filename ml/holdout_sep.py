@@ -214,6 +214,11 @@ def main() -> None:
           "- The served rule here includes the rising-price guard and the calibration cap (added 10 Oct); the August",
           "  numbers in reports/metrics.md do not. This is the first held-out test of the rule as served.",
           "- September events: MLB home games only (no concerts collected), from the MLB Stats API.",
+          "- First run stopped at the pipeline's event sanity check: a 19:15 game's post-game window ran past midnight",
+          "  into a day without a game. The check now also allows the day after; features and verdict rules unchanged.",
+          "- September file: Hugging Face mirror (official TLC host unreachable from our network); its row count matches",
+          "  TLC's published Sep 2024 total (640,325 trips/day x 30) within 0.0002%, the same method that matches the",
+          "  sha256-verified August file within 0.0003%.",
           "- Still New York data: this shows the result holds in a new month, not that it holds in Kuala Lumpur."]
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     REPORT.with_suffix(".json").write_text(json.dumps({

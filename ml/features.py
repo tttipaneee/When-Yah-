@@ -97,7 +97,9 @@ def build_frame(z: pd.DataFrame) -> pd.DataFrame:
         f = event_features(_minutes(df.bucket[m]), s, s + dur)
         for c, v in f.items():
             df.loc[m, c] = v
-    on_event_day = df.zone.isin(ev.zone_id) & df.bucket.dt.date.isin(set(ev.scheduled_start.dt.date))
+    # event day or the day after (a night game's 2-h post window can run past midnight; found on Sep 2024 data)
+    days = set(ev.scheduled_start.dt.date) | set((ev.scheduled_start + pd.Timedelta(days=1)).dt.date)
+    on_event_day = df.zone.isin(ev.zone_id) & df.bucket.dt.date.isin(days)
     assert df.loc[~on_event_day, "event_nearby"].eq(0).all(), "event features leak outside event days"
     df["level"] = df.idx_a
 
