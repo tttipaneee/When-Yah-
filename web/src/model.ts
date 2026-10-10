@@ -39,7 +39,7 @@ export function presenterAt(): string | null {
   } catch { return null }
 }
 
-function kualaLumpurNowIso(): string {
+export function kualaLumpurNowIso(): string {
   // the API reads any timezone as KL time; send an explicit +08:00 timestamp
   const at = presenterAt()
   if (at) return `${at}:00+08:00`
@@ -123,4 +123,11 @@ export function kmBetween(a: { lat: number; lon: number }, b: { lat: number; lon
 export function klTime(iso: string): string {
   const d = new Date(new Date(iso).getTime() + 8 * 3600_000)
   return d.toISOString().slice(11, 16)
+}
+
+/** Trip time with traffic for the map before any forecast (/api/route, TomTom, one call); nulls without a key. */
+export function fetchRouteNow(a: { lat: number; lon: number }, b: { lat: number; lon: number }): Promise<any> {
+  const q = new URLSearchParams({ from_lat: String(a.lat), from_lon: String(a.lon), to_lat: String(b.lat),
+    to_lon: String(b.lon), at: kualaLumpurNowIso() })
+  return fetch(`/api/route?${q}`).then((r) => (r.ok ? r.json() : null)).catch(() => null)
 }

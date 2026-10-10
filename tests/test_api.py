@@ -285,3 +285,17 @@ def test_walk_out_only_in_exit_window_and_points_outside_the_circle():
     assert ended and ended["ended"]
     no_dir = client.post("/api/forecast", json={**near, "dropoff": None}).json()["walk_out"]
     assert no_dir and no_dir["target"] is None and no_dir["walk_km"] is None  # pickup at the venue, no drop-off
+
+
+def test_route_now_for_the_map(monkeypatch):
+    import api.traffic as t
+    import api.routes.forecast as rf
+    rf._route_now.cache_clear()
+    monkeypatch.setattr(t, "route_with_traffic", lambda a, b, d=None, timeout=8: (15.6, 18.6))
+    q = "from_lat=3.0537&from_lon=101.6935&to_lat=3.1326&to_lon=101.688"
+    d = client.get(f"/api/route?{q}").json()
+    assert d == {"km": 15.6, "minutes": 18.6, "source": "TomTom traffic prediction"}
+    rf._route_now.cache_clear()
+    monkeypatch.setattr(t, "route_with_traffic", lambda a, b, d=None, timeout=8: None)  # no key / error
+    assert client.get(f"/api/route?{q}").json() == {"km": None, "minutes": None, "source": None}
+    rf._route_now.cache_clear()

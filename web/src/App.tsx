@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, fetchMetrics, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, kmBetween, klTime } from "./model";
 import { runModel, explainForecast } from "./model";
 
 export default function App() {
@@ -98,13 +98,15 @@ export default function App() {
   }
   // Route time + distance: TomTom traffic-aware "leave now" (via /api/forecast) when the API has it,
   // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
-  var OSRM_ROUTE = null, MODEL_ROUTE = "";
+  var OSRM_ROUTE = null, MODEL_ROUTE = "", ROUTE_NOW = null;  // ROUTE_NOW: {key, km, minutes, source} from /api/route
   function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
   function routeText(){
     var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
     if(t && t.minutes && t.minutes["0"] != null && t.km != null)
       return {html: "<b>" + Math.round(t.minutes["0"]) + " min</b> now with traffic · " + t.km.toFixed(1) + " km",
               src: "TomTom traffic prediction"};
+    var n = ROUTE_NOW && ROUTE_NOW.key === routeKey() && ROUTE_NOW.minutes != null && ROUTE_NOW;  // traffic now, before any forecast
+    if(n) return {html: "<b>" + Math.round(n.minutes) + " min</b> now with traffic · " + n.km.toFixed(1) + " km", src: n.source};
     if(OSRM_ROUTE) return {html: "<b>" + OSRM_ROUTE.min + " min</b> without traffic · " + OSRM_ROUTE.km.toFixed(1) + " km",
                            src: "OpenStreetMap route"};
     return null;
@@ -122,6 +124,11 @@ export default function App() {
     var a = PLACE_LATLON[state.from];
     var b = PLACE_LATLON[state.to];
     if(a && b && state.from !== state.to) {
+      var rk = routeKey();
+      if(!ROUTE_NOW || ROUTE_NOW.key !== rk) {
+        ROUTE_NOW = {key: rk, minutes: null};
+        fetchRouteNow(a, b).then(function(d){ if(d && ROUTE_NOW && ROUTE_NOW.key === rk){ ROUTE_NOW = Object.assign({key: rk}, d); showRouteStats(); } });
+      }
       var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(bigLayers);
       fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
         .then(r => r.json())
