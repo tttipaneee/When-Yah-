@@ -39,6 +39,7 @@ Fill in as they're created; keep them working.
 - Setup: `pip install -r requirements.txt && (cd web && npm install)`
 - Download data: `scripts/download_data.sh` (sha256-verified, 19,128,392 rows)
 - NYC venue events: `python ml/fetch_nyc_events.py` → `data/events/nyc_events_2024-08.csv`
+- Weather (NOAA Central Park hourly): `python ml/fetch_weather.py` → `data/weather/nyc_central_park_2024-08.csv`
 - Check data signal (go/no-go): `python ml/check_signal_nyc.py data/raw/fhvhv_tripdata_2024-08.parquet`
 - Build dataset / event effect / train / evaluate: `[TBD]`
 - API tests: `python -m pytest -q tests`
