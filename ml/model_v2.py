@@ -7,6 +7,8 @@ Two parts, in plain words:
      (rule 3). In Malaysia the place's usual price is the usual price the user types.
   2. rel_level = price now / the place's usual price; excess = rel_level - normal(now). One LightGBM per horizon
      learns how the price moves from (time, rain, events, normal now, normal at t+h, rel_level, excess).
+Event features are trained but always zero when serving (Malaysian events are never fed to the model; the ablation in
+reports/metrics_v2.md shows they add nothing, and zeroing them changes MAE by < 0.00001).
 Targets are v1's: ratio_h = idx_b(t+h) / idx_b(t) on trip-half B (split-half noise control). Every feature uses only
 information available at t (normal(t+h) depends only on the clock).
 Reasons: LightGBM SHAP contributions (pred_contrib) of the +30 model, summed per group -> words. They explain the
@@ -49,7 +51,7 @@ def add_v2(df: pd.DataFrame, h: int, table: pd.Series, zmed: pd.Series) -> pd.Da
     out["normal_h"] = _normal(table, (later.dt.dayofweek >= 5).astype(int), later.dt.hour)
     out["normal_change"] = out.normal_h - out.normal_now
     med = out.zone.map(zmed)
-    out["rel_level"] = np.clip(out.idx_a / med.fillna(out.idx_a.median()), *REL_RANGE)
+    out["rel_level"] = np.clip(out.idx_a / med.fillna(float(zmed.median())), *REL_RANGE)  # unseen zone: train constant
     out["excess"] = out.rel_level - out.normal_now
     return out
 
@@ -71,8 +73,18 @@ def serve_rows(row: pd.DataFrame, local_dt, table: pd.Series, rel_level: float |
     return out
 
 
+def fit_median_cal(pred: np.ndarray, y: np.ndarray, bins: int = 50):
+    """Isotonic map predicted -> observed MEDIAN ratio (quantile bins of the prediction, weighted by size), so it keeps
+    the l1 model's 'typical outcome' meaning (a plain isotonic fit estimates the mean and shifted every forecast
+    ~+0.5 points: leakage audit 11 Oct)."""
+    from sklearn.isotonic import IsotonicRegression
+    d = pd.DataFrame({"p": pred, "y": y})
+    g = d.groupby(pd.qcut(d.p, bins, duplicates="drop"), observed=True)
+    return IsotonicRegression(out_of_bounds="clip").fit(g.p.median(), g.y.median(), sample_weight=g.size())
+
+
 def predict_line(m: dict, X: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """(mean, p10, p90) ratios. If m has "cal" (isotonic, fit on VAL days: predicted -> observed ratio), the mean is
+    """(typical, p10, p90) ratios. If m has "cal" (isotonic, fit on VAL days: predicted -> observed median), the value is
     mapped through it and the band shifted by the same amount (added 11 Oct after September showed the raw line
     overstating big moves ~1.5x, reports/metrics_v2.md)."""
     mean, lo, hi = m["mean"].predict(X), m["q10"].predict(X), m["q90"].predict(X)
@@ -92,14 +104,17 @@ def contributions(model, X: pd.DataFrame) -> pd.DataFrame:
 MIN_CONTRIB = 0.003  # a group must move the prediction by >= 0.3 percentage points to be named
 
 
-def reason_words(contrib: pd.Series, row: pd.Series) -> list[str]:
+def reason_words(contrib: pd.Series, row: pd.Series, shown_pct: float | None = None) -> list[str]:
     """Top 1-2 groups by absolute contribution -> phrases (largest first). A group is named only when its words
-    are true for this row (rain only if raining; "above/below normal" only if the level pushes the same way)."""
+    are true for this row (rain only if raining; "above/below normal" only if the level pushes the same way) and,
+    when the shown change is clearly up or down (|pct| >= 0.5%), only if it pushes the same way as the shown number."""
     out = []
     for g in contrib.abs().sort_values(ascending=False).index:
         c = contrib[g]
         if abs(c) < MIN_CONTRIB or len(out) == 2:
             break
+        if shown_pct is not None and abs(shown_pct) >= 0.005 and np.sign(c) != np.sign(shown_pct):
+            continue
         if g == "time":
             out.append("prices usually rise at this time of day" if c > 0 else "prices usually ease at this time of day")
         elif g == "level" and "excess" in row:

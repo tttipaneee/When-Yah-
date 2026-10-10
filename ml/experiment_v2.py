@@ -13,9 +13,10 @@ Rule (fixed in this file and committed BEFORE the first run):
   The mean-model objective (l2 or l1) is chosen on VAL MAE (with_level, +30) before looking at test or September.
 Also reported (no verdict): MAE at every horizon, p10-p90 band coverage, ablation by feature group, and how big
 predicted moves (|pred| >= 5%) turned out.
-Added 11 Oct AFTER the first run (post hoc, disclosed in the report): the first run showed the raw line overstating
-big moves on September (predicted -17% -> actual median -11%). An isotonic map predicted -> observed ratio is fit on
-VAL days per variant/horizon. The calibrated line is served only if it passes the SAME rule above on test days and
+Added 11 Oct AFTER the first run (post hoc, disclosed in the report): the first run's TEST and SEPTEMBER results showed
+the raw line overstating big moves (predicted -17% -> actual median -11%), so neither is an untouched holdout for the
+calibrated line. An isotonic map predicted -> observed MEDIAN ratio is fit on VAL days per variant/horizon (a first
+version fit the mean and shifted every forecast ~+0.5 points; replaced after the leakage audit). The calibrated line is served only if it passes the SAME rule above on test days and
 September; otherwise the raw v2 line (if it passed) is served.
 Usage: python -m ml.experiment_v2 [data/raw/fhvhv_tripdata_2024-09.parquet]
 """
@@ -27,7 +28,6 @@ from pathlib import Path
 
 import joblib
 import lightgbm as lgb
-from sklearn.isotonic import IsotonicRegression
 import numpy as np
 import pandas as pd
 
@@ -143,7 +143,7 @@ def main() -> None:
         for h in HORIZONS:
             dv_h = V.add_v2(va[va[f"ratio_{h}"].notna()], h, table, zmed)
             m = models[name][h]
-            m["cal"] = IsotonicRegression(out_of_bounds="clip").fit(m["mean"].predict(dv_h[feats]), dv_h[f"ratio_{h}"])
+            m["cal"] = V.fit_median_cal(m["mean"].predict(dv_h[feats]), dv_h[f"ratio_{h}"].to_numpy())
     r_test = score(te, v1, models, table, zmed, "test Aug 26-31")
     sep = sep_frame(sep_path)
     r_sep = score(sep, v1, models, table, zmed, "September 2024")
@@ -175,8 +175,8 @@ def main() -> None:
         for name in V.VARIANTS:
             for h in HORIZONS:
                 p, a, b, c = r["mae"][(name, h)]
-                rows.append(f"| {name} | +{h} | {p:.4f} | {a:.4f} | {b:.4f} | {c:.4f} | {(b / a - 1):+.1%} | "
-                            f"{r['coverage'][(name, h)]:.1%} |")
+                rows.append(f"| {name} | +{h} | {p:.4f} | {a:.4f} | {b:.4f} | {c:.4f} | {(c / a - 1):+.1%} | "
+                            f"{(c / p - 1):+.1%} | {r['coverage'][(name, h)]:.1%} |")
         return rows
 
     def diff_lines(r):
@@ -202,8 +202,10 @@ def main() -> None:
         return out
 
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-    head = ["| Variant | Horizon | MAE persistence | MAE v1 | MAE v2 raw | MAE v2 calibrated | raw v2 vs v1 | "
-            "served band p10–p90 coverage |", "|---|---|---|---|---|---|---|---|"]
+    dirty = subprocess.run(["git", "status", "--porcelain", "ml/"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+    commit += " + UNCOMMITTED changes in ml/" if dirty else ""
+    head = ["| Variant | Horizon | MAE persistence | MAE v1 | MAE v2 raw | MAE v2 calibrated | calibrated vs v1 | "
+            "calibrated vs persistence | served band p10–p90 coverage (nominal 80%) |", "|---|---|---|---|---|---|---|---|---|"]
 
     def calib_rows(r):
         return ["| Raw prediction | Windows | Raw median | Calibrated median | Actual median |", "|---|---|---|---|---|",
@@ -223,7 +225,9 @@ def main() -> None:
          f"## Test days Aug 26–31 ({r_test['windows']:,} windows)", *diff_lines(r_test), "", *head, *mae_rows(r_test), "",
          f"## September 2024 ({r_sep['windows']:,} windows)", *diff_lines(r_sep), "", *head, *mae_rows(r_sep), "",
          "## Does the predicted size match reality? (with_level +30, by raw prediction)",
-         "Calibration (isotonic, fit on val days) was added after the first run showed the raw line overstating big moves.",
+         "Calibration (isotonic to the observed MEDIAN, fit on val days) was added after inspecting the first run's test "
+         "and September results, which showed the raw line overstating big moves; neither set is an untouched holdout "
+         "for the calibrated line (the raw line's pass is the pre-registered one).",
          "", "Test days:", "", *calib_rows(r_test), "", "September:", "", *calib_rows(r_sep), "",
          "## Big predicted moves (+30 min, line as served)", "Test days:", *big_lines(r_test), "September:", *big_lines(r_sep), "",
          "## Ablation (test windows with a +30 outcome, with_level +30, MAE when one group is left out)", "",
@@ -232,6 +236,11 @@ def main() -> None:
          "| Hour | Weekday | Weekend |", "|---|---|---|",
          *[f"| {h:02d}:00 | {table.get((0, h), float('nan')):.3f} | {table.get((1, h), float('nan')):.3f} |" for h in range(24)],
          "", "## Reading (plain)",
+         "- The gain is real (it holds on a month the model never saw) but practically small: about 0.01–0.07 percentage "
+         "points of absolute error (0.2–1.3% relative). For most windows the line is about flat; the useful signal is "
+         "'a price far above usual tends to fall back'.",
+         "- Predicted RISES of 5% or more were wrong-signed in both test and September (see the calibration table).",
+         "- In the ablation, events and rain add almost nothing; time of day carries most of the gain over persistence.",
          "- MAE includes trip-sampling noise that no model can remove (the oracle bound in `reports/metrics.md`).",
          "- 'Reasons' shown in the app are the model's SHAP contributions grouped into time / your price vs usual / rain /",
          "  event: why the MODEL predicts the move, not a proven cause. Traffic is never named (tested: no price effect).",
@@ -241,6 +250,8 @@ def main() -> None:
                                    "calibrated": calibrated,
                                    "test": {n: r_test["diff30"][n] for n in V.VARIANTS},
                                    "september": {n: r_sep["diff30"][n] for n in V.VARIANTS},
+                                   "test_calibrated": {n: r_test["diff30_cal"][n] for n in V.VARIANTS},
+                                   "september_calibrated": {n: r_sep["diff30_cal"][n] for n in V.VARIANTS},
                                    "big_moves": {"test": r_test["big"], "september": r_sep["big"]},
                                    "ablation_test_mae30": abl}, indent=1), encoding="utf-8")
     print("\n".join(L))

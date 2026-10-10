@@ -129,7 +129,7 @@ def _predict(req: ForecastRequest, quotes: dict[str, float], event) -> tuple[dic
             mean, lo, hi = (float(a[0]) for a in model_v2.predict_line(m, X2))
             out[h] = (mean - 1, lo - 1, hi - 1, out[h][3])
             if h == 30:
-                because = model_v2.reason_words(model_v2.contributions(m["mean"], X2).iloc[0], X2.iloc[0])
+                because = model_v2.reason_words(model_v2.contributions(m["mean"], X2).iloc[0], X2.iloc[0], mean - 1)
         line = "lgbm_v2"
     return out, variant, level, because, line, v1_pct
 
@@ -185,7 +185,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     best = max(horizon, key=lambda h: mults[h.minutes])
     odds_high = k is not None and mults[best.minutes] >= k and raw_p[best.minutes] >= MIN_WAIT_P
     # product rule (10 Oct, same as ml/train.tunggu): never "Wait" while the expected price there is not below now
-    falling = v1_pct[best.minutes] < 0  # v1's line: the rule exactly as validated (reports/decision.json)
+    # v1's line: the rule as validated (reports/decision.json); AND the shown line must fall there too (product rule:
+    # never "Wait" next to a flat or rising line; the leakage audit (11 Oct) found 18% of v1 waits had a v2 line >= now)
+    falling = v1_pct[best.minutes] < 0 and best.pct_change < 0
     wait = bool(gate.get("validated")) and odds_high and falling
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
@@ -270,7 +272,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         pass  # the traffic reason explains the book-now
     elif odds_high and not falling:
         reasons.append(f"Book now: the chance of a ≥10% drop by +{best.minutes} min is {best.p_drop10:.0%}, but the "
-                       f"Wait rule's expected price then is {v1_pct[best.minutes]:+.0%} — not lower than now (product rule; "
+                       f"expected price then is {best.pct_change if best.pct_change >= 0 else v1_pct[best.minutes]:+.0%} — not lower than now (product rule; "
                        "not tested on held-out days)")
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
