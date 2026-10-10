@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+data/raw/
+data/processed/
+ml/models/*.joblib
+.DS_Store
