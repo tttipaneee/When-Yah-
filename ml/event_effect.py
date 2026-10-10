@@ -9,6 +9,7 @@ VALIDATED only if both the train and held-out CIs exclude 0 with the same sign; 
 (the API then returns learned_effect: null and does not feed event features to the model).
 Usage: python -m ml.event_effect
 """
+import json
 from datetime import date
 from pathlib import Path
 
@@ -19,16 +20,21 @@ from ml.features import load_nyc_events
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "reports" / "event_effect.md"
+SUMMARY = ROOT / "reports" / "event_effect.json"  # read by the API
 WINDOWS = {"60–0 min before start": ("start", -60, 0), "0–45 min after end": ("end", 0, 45),
            "45–90 min after end": ("end", 45, 90)}
 RNG = np.random.default_rng(0)
+MIN_HELD = 5  # fewer held-out games than this cannot validate anything
 
 
-def uplifts(z: pd.DataFrame, games: pd.DataFrame, anchor: str, a: int, b: int) -> np.ndarray:
+def uplifts(z: pd.DataFrame, games: pd.DataFrame, anchor: str, a: int, b: int, all_games: pd.DataFrame,
+            period: tuple[str, str]) -> np.ndarray:
+    """Controls: non-game days inside `period` = the TRAIN period for every game (past data only)."""
+    in_period = (z.bucket >= period[0]) & (z.bucket < period[1])
     out = []
     for _, g in games.iterrows():
         zz = z[z.zone == g.zone_id]
-        game_days = set(games[games.zone_id == g.zone_id].start.dt.date)
+        game_days = set(all_games[all_games.zone_id == g.zone_id].start.dt.date)
         t0 = g[anchor] + pd.Timedelta(minutes=a)
         t1 = g[anchor] + pd.Timedelta(minutes=b)
         win = zz[(zz.bucket >= t0.floor("15min")) & (zz.bucket < t1)]
@@ -36,7 +42,7 @@ def uplifts(z: pd.DataFrame, games: pd.DataFrame, anchor: str, a: int, b: int) -
             continue
         tod = set(win.bucket.dt.time)
         weekend = g.start.dayofweek >= 5
-        ctrl = zz[zz.bucket.dt.time.isin(tod) & ~zz.bucket.dt.date.isin(game_days)
+        ctrl = zz[in_period[zz.index] & zz.bucket.dt.time.isin(tod) & ~zz.bucket.dt.date.isin(game_days)
                   & ((zz.bucket.dt.dayofweek >= 5) == weekend)]
         if len(ctrl) < 3:
             continue
@@ -62,15 +68,17 @@ def main() -> None:
          "Events: MLB home games at Yankee Stadium (TLC zone 247) and Citi Field (zone 93), Aug 2024; start =",
          "first pitch, end = first pitch + game duration (statsapi.mlb.com, URLs in `data/events/nyc_events_2024-08.csv`).",
          "Uplift = venue-zone price index in the window ÷ same zone, same clock times, non-game days of the same",
-         "weekday/weekend type − 1. 95% CI: bootstrap over games.",
+         "weekday/weekend type, from the train period only (Aug 1–21) − 1. 95% CI: bootstrap over games.",
+         f"VALIDATED needs both CIs to exclude 0 with the same sign and at least {MIN_HELD} held-out games.",
          f"Train games: Aug 1–21 ({len(train)}). Held-out games: Aug 22–31 ({len(held)}).", "",
          "| Window | Train: games | Train uplift (95% CI) | Held-out: games | Held-out uplift (95% CI) | Holds? |",
          "|---|---|---|---|---|---|"]
     verdicts = {}
     for name, (anchor, a, b) in WINDOWS.items():
-        tr, he = uplifts(z, train, anchor, a, b), uplifts(z, held, anchor, a, b)
+        tr = uplifts(z, train, anchor, a, b, ev, ("2024-08-01", "2024-08-22"))
+        he = uplifts(z, held, anchor, a, b, ev, ("2024-08-01", "2024-08-22"))
         (mt, lt, ht), (mh, lh, hh) = ci(tr), ci(he)
-        ok = (lt > 0 and lh > 0) or (ht < 0 and hh < 0)
+        ok = len(he) >= MIN_HELD and ((lt > 0 and lh > 0) or (ht < 0 and hh < 0))
         verdicts[name] = (ok, mt, mh)
         L.append(f"| {name} | {len(tr)} | {mt:+.1%} ({lt:+.1%} … {ht:+.1%}) | {len(he)} | "
                  f"{mh:+.1%} ({lh:+.1%} … {hh:+.1%}) | {'yes' if ok else 'no'} |")
@@ -91,6 +99,16 @@ def main() -> None:
             L += ["", f"Direction only (not a validated number): in the {k} window the uplift is positive in both",
                   "periods, but the train interval includes 0, so the rule above is not met. The app may say",
                   "\"prices often rise right after big events\" as a hypothesis, without a number."]
+    L += ["", "Method history (disclosed because the verdict changed while fixing the leakage audit):",
+          "1. Controls from all non-game days in Aug (incl. held-out days): post-game train CI crossed 0 → NOT VALIDATED.",
+          "2. Controls from non-game days in each game's own period: only 3 held-out games had controls → too few.",
+          "3. Controls from train-period non-game days for every game (past data only; this report).",
+          f"The {MIN_HELD}-game minimum was added at step 3. Treat the effect as a modest, NYC-baseball result."]
+    k = held_ok[0] if held_ok else None
+    SUMMARY.write_text(json.dumps({"status": status, "window": k,
+                                   "pct": round(float(verdicts[k][1]), 3) if k else None,
+                                   "pct_source": "train-period mean uplift (held-out confirmed)" if k else None},
+                                  ensure_ascii=False, indent=1), encoding="utf-8")
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
 

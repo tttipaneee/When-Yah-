@@ -3,6 +3,9 @@
 Price index = base_passenger_fare / expected fare for the trip's miles and minutes. Expected fare is a
 linear fit per company (HV0003 Uber, HV0005 Lyft) on TRAIN days only. Trip index clipped to [0.3, 3],
 averaged per pickup zone x 15-min request window; windows with < MIN_TRIPS trips are dropped.
+Each trip is also assigned at random (seeded) to half A or half B, and the index is averaged per half:
+the model sees the level from half A and is scored on half B, so sampling noise in a window's average
+cannot be both the input and the outcome (leakage audit finding 1). Windows need >= MIN_HALF per half.
 Split by day (no shuffling): train Aug 1-21, val Aug 22-25, test Aug 26-31.
 
 Outputs: data/processed/windows.parquet (zone, bucket, idx, n, split), data/processed/base_fare.json
@@ -22,6 +25,7 @@ OUT = ROOT / "data" / "processed"
 COLS = ["hvfhs_license_num", "request_datetime", "PULocationID", "trip_miles", "trip_time",
         "base_passenger_fare"]
 MIN_TRIPS = 8
+MIN_HALF = 4
 SPLITS = [("train", "2024-08-01", "2024-08-22"), ("val", "2024-08-22", "2024-08-26"),
           ("test", "2024-08-26", "2024-09-01")]
 
@@ -62,6 +66,7 @@ def main() -> None:
     (OUT / "base_fare.json").write_text(json.dumps({"fit_on": "train days Aug 1-21 2024", "coef": coef}, indent=1))
 
     parts, n_trips = [], 0
+    rng = np.random.default_rng(0)
     for d in chunks(pf):
         exp = np.full(len(d), np.nan)
         for lic, c in coef.items():
@@ -71,15 +76,21 @@ def main() -> None:
         d = d[np.isfinite(d.idx) & (exp > 1)]
         n_trips += len(d)
         d["bucket"] = d.t.dt.floor("15min")
-        parts.append(d.groupby(["PULocationID", "bucket"]).idx.agg(["sum", "count"]))
+        half_a = rng.random(len(d)) < 0.5
+        d = d.assign(sa=np.where(half_a, d.idx, 0.0), na=half_a.astype(int),
+                     sb=np.where(half_a, 0.0, d.idx), nb=(~half_a).astype(int))
+        g = d.groupby(["PULocationID", "bucket"])
+        parts.append(pd.concat([g.idx.agg(["sum", "count"]), g[["sa", "na", "sb", "nb"]].sum()], axis=1))
     z = pd.concat(parts).groupby(level=[0, 1]).sum().reset_index()
-    z = z.rename(columns={"PULocationID": "zone", "count": "n"})
+    z = z.rename(columns={"PULocationID": "zone", "count": "n", "na": "n_a", "nb": "n_b"})
     z["idx"] = z["sum"] / z["n"]
-    z = z[z.n >= MIN_TRIPS].drop(columns="sum")
+    z["idx_a"] = z.sa / z.n_a.where(z.n_a > 0)
+    z["idx_b"] = z.sb / z.n_b.where(z.n_b > 0)
+    z = z[(z.n >= MIN_TRIPS) & (z.n_a >= MIN_HALF) & (z.n_b >= MIN_HALF)].drop(columns=["sum", "sa", "sb"])
     z["split"] = split_of(z.bucket)
     z = z.sort_values(["zone", "bucket"]).reset_index(drop=True)
     z.to_parquet(OUT / "windows.parquet", index=False)
-    print(f"trips used: {n_trips:,}; windows (>= {MIN_TRIPS} trips): {len(z):,} in {z.zone.nunique()} zones")
+    print(f"trips used: {n_trips:,}; windows (>= {MIN_TRIPS} trips, >= {MIN_HALF} per half): {len(z):,} in {z.zone.nunique()} zones")
     print(z.groupby("split").agg(windows=("idx", "size"), days=("bucket", lambda s: s.dt.date.nunique())))
 
 

@@ -59,7 +59,7 @@ def main() -> None:
     rcols = [f"ratio_{h}" for h in HORIZONS]
     te = te.dropna(subset=rcols).reset_index(drop=True)
     actual = te[rcols].to_numpy()
-    clusters = te.zone.to_numpy()
+    clusters = (te.zone.astype(str) + "_" + te.bucket.dt.date.astype(str)).to_numpy()  # zone x day blocks
 
     hour_avg = {h: tr.groupby("hour")[f"ratio_{h}"].mean() for h in HORIZONS}
     ha = np.c_[[te.hour.map(hour_avg[h]).to_numpy() for h in HORIZONS]].T
@@ -73,6 +73,14 @@ def main() -> None:
 
     rows = {"Book now (always)": policy_stats(np.zeros(len(te), bool), np.zeros(len(te), int), actual, clusters)}
     rows["Hour-of-day average ratio"] = policy_stats(*decide(ha, None), actual, clusters)
+    # extra, level-aware baseline (leakage audit): per horizon, ratio ~ a + b / level, fit on train
+    lin = []
+    for h in HORIZONS:
+        d = tr.dropna(subset=[f"ratio_{h}"])
+        c = np.polyfit(1 / d.level, d[f"ratio_{h}"], 1)
+        lin.append(np.polyval(c, 1 / te.level))
+    lin = np.c_[lin].T
+    rows["Linear on level (1/level)"] = policy_stats(*decide(lin, None), actual, clusters)
     for v in preds:
         rows[f"When Yah? {v}"] = policy_stats(*decide(preds[v]["mean"], preds[v]["q90"]), actual, clusters)
     oracle_best = actual.argmin(axis=1)
@@ -83,6 +91,7 @@ def main() -> None:
     surge_rows = {}
     for name, (w, bst) in {"Book now (always)": (np.zeros(len(te), bool), np.zeros(len(te), int)),
                            "Hour-of-day average ratio": decide(ha, None),
+                           "Linear on level (1/level)": decide(lin, None),
                            "When Yah? no_level": decide(preds["no_level"]["mean"], preds["no_level"]["q90"]),
                            "When Yah? with_level": decide(preds["with_level"]["mean"], preds["with_level"]["q90"])
                            }.items():
@@ -96,7 +105,10 @@ def main() -> None:
          "(>= 8 trips); price index = fare / expected fare for distance + duration (fit on train days).",
          "Split by day: **train Aug 1–21**, **val Aug 22–25** (threshold tuning), **test Aug 26–31** (below).",
          f"Test windows with all four horizons observed: **{len(te):,}** across {te.zone.nunique()} zones.",
-         "Served models use no zone IDs. Intervals: 95% bootstrap over zones (200 resamples).", "",
+         "Served models use no zone IDs. Intervals: 95% bootstrap over zone x day blocks (200 resamples).",
+         "**Noise control:** each window's trips are split at random into halves A and B. The level the model",
+         "sees comes from half A; every outcome (ratio, drop, saving) is measured on half B, so sampling noise in",
+         "the current window cannot masquerade as a predictable price drop.", "",
          "## 1. Policy savings (test)",
          "Saving = 1 − (price paid ÷ price now), averaged over all test windows. Decision rule = the API's:",
          "wait for the horizon with the lowest predicted price, only if the predicted saving exceeds the",
@@ -147,23 +159,24 @@ def main() -> None:
 
     wl, nl, ho = rows["When Yah? with_level"], rows["When Yah? no_level"], rows["Hour-of-day average ratio"]
     sw, sh = surge_rows["When Yah? with_level"], surge_rows["Hour-of-day average ratio"]
-    tie = wl["lo"] <= ho["hi"]
-    L += ["", "## Reading (plain)",
-          f"- **with_level, all windows:** mean saving {pct(wl['saving'])} vs book now and "
-          f"{pct(wl['saving'] - ho['saving'])} vs the hour-of-day baseline"
-          + (" — **not clearly better than the hour-of-day baseline overall** (intervals overlap)" if tie else "")
-          + f". It waits only {wl['wait_rate']:.1%} of the time; {wl['worse_share_of_waits']:.1%} of its waits "
-          f"cost more (hour-of-day baseline: {ho['worse_share_of_waits']:.1%}).",
-          f"- **with_level, when the price is already ≥ 20% high** (the case the app is for): saving "
-          f"{pct(sw['saving'])} vs {pct(sh['saving'])} for the hour-of-day baseline; its waits save "
-          f"{pct(sw['saving_when_wait'])} on average and cost more {sw['worse_share_of_waits']:.1%} of the time "
-          f"(baseline {sh['worse_share_of_waits']:.1%}).",
-          f"- **no_level** (time, rain, events only): mean saving {pct(nl['saving'])} vs book now, waits "
-          f"{nl['wait_rate']:.1%} of the time. Without knowing whether the price is currently high, the model "
-          "rarely finds a wait worth the risk — the honest default is \"book now\".",
-          "- The gain comes mostly from mean reversion: when the price is already high, it tends to fall back.",
-          "  Part of that is real surge decay and part is noise in a single window's average — a single user's",
-          "  quote is noisier still, so treat savings as an upper-end estimate for one rider.",
+    beats = {k: rows[k]["lo"] > ho["hi"] for k in ("When Yah? with_level", "When Yah? no_level")}
+    verdict = ("**When Yah? beats both baselines on held-out data.**" if any(beats.values()) else
+               "**When Yah? does NOT beat the hour-of-day baseline on held-out data.** It beats \"book now\" "
+               "only marginally, because it almost always advises booking now.")
+    mae30 = (np.abs(actual[:, 1] - preds["with_level"]["mean"][:, 1]).mean() / np.abs(actual[:, 1] - 1).mean() - 1)
+    L += ["", "## Reading (plain)", f"- {verdict}",
+          f"- with_level: mean saving {pct(wl['saving'])} (hour-of-day baseline {pct(ho['saving'])}); it waits "
+          f"{wl['wait_rate']:.1%} of the time, saving {pct(wl['saving_when_wait'])} when it does, but "
+          f"{wl['worse_share_of_waits']:.1%} of its waits cost more. When the price is ≥ 20% high: "
+          f"{pct(sw['saving'])} vs {pct(sh['saving'])} for the baseline.",
+          f"- no_level waits {nl['wait_rate']:.1%} of the time: without the current level, nothing predicts a drop "
+          "large enough to beat the risk.",
+          f"- Forecast error at +30 min is {mae30:+.1%} vs persistence and P(drop) AUC is "
+          f"{roc_auc_score((actual[:, 1] <= 0.9).astype(int), preds['with_level']['p'][:, 1]):.2f}: "
+          "15-minute price changes in this data are mostly unpredictable from time, rain and the current level.",
+          "- An earlier version of this report (commit 172d4a1) showed larger savings; the leakage audit found",
+          "  that most of it was sampling noise (the same noisy window average was both input and outcome).",
+          "  Those numbers are withdrawn. The p10–p90 band (≈ 80% coverage) is still an honest range.",
           "- Patterns are learned in New York (Aug 2024) and applied to the user's local clock in Klang Valley.",
           "  They are not Malaysian data; typed quotes would become Malaysian training data (roadmap)."]
     REPORT.write_text("\n".join(L) + "\n", encoding="utf-8")

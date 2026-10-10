@@ -3,10 +3,13 @@
 Every feature uses only information available at time t:
   time:    hour, minute, dow, weekend (local clock at the pickup)
   weather: rain = last hourly report at or before t had precipitation > 0 (user toggle when serving)
-  events:  event_nearby, during_event, minutes_to_start, minutes_since_end (scheduled start, end of a
-           real event at the pickup's venue zone; NYC training events have sourced start/end)
-  level:   idx_t, current price / expected price (with-level variant only; served as quote / usual price)
-No zone IDs (area-agnostic). Targets: ratio_h = idx_{t+h} / idx_t, drop10_h = ratio_h <= 0.9.
+  events:  event_nearby, during_event, minutes_to_start, minutes_since_end, from the SCHEDULED start
+           (known in advance) and an assumed end = scheduled start + median train-game duration
+  level:   idx_a(t), current price / expected price from trip-half A (with-level variant only; served as
+           quote / usual price)
+No zone IDs (area-agnostic). Targets use trip-half B (independent of the level's sampling noise):
+ratio_h = idx_b(t+h) / idx_b(t), drop10_h = ratio_h <= 0.9. Targets whose t+h falls in the next split
+are dropped. Decision time: a window [t, t+15) is summarised at its start t; horizons are start to start.
 """
 from datetime import datetime
 from pathlib import Path
@@ -57,13 +60,21 @@ def load_weather() -> pd.DataFrame:
 def load_nyc_events() -> pd.DataFrame:
     e = pd.read_csv(ROOT / "data" / "events" / "nyc_events_2024-08.csv")
     e = e[e.start.notna() & e.end.notna()].copy()
-    for c in ("start", "end"):
+    for c in ("scheduled_start", "start", "end"):
         e[c] = pd.to_datetime(e[c], utc=True).dt.tz_convert("America/New_York").dt.tz_localize(None)
     return e
 
 
+def median_event_minutes(e: pd.DataFrame) -> float:
+    """Median actual game length on TRAIN days (Aug 1-21) -> assumed duration from the scheduled start."""
+    tr = e[e.start < "2024-08-22"]
+    return float(((tr.end - tr.start).dt.total_seconds() / 60).median())
+
+
 def _minutes(ts) -> np.ndarray:
-    return (pd.to_datetime(ts).astype("int64") // 60_000_000_000).to_numpy(dtype=float)
+    """Minutes since epoch, independent of the datetime64 unit (ns or us)."""
+    ts = pd.Series(pd.to_datetime(pd.Series(ts)))
+    return ((ts - pd.Timestamp(0)) / pd.Timedelta(minutes=1)).to_numpy(dtype=float)
 
 
 def build_frame(z: pd.DataFrame) -> pd.DataFrame:
@@ -79,18 +90,24 @@ def build_frame(z: pd.DataFrame) -> pd.DataFrame:
     for c in EVENT:
         df[c] = FAR if c.startswith("minutes") else 0.0
     ev = load_nyc_events()
+    dur = median_event_minutes(ev)
     for zone, g in ev.groupby("zone_id"):
         m = (df.zone == zone).to_numpy()
-        f = event_features(_minutes(df.bucket[m]), _minutes(g.start), _minutes(g.end))
+        s = _minutes(g.scheduled_start)
+        f = event_features(_minutes(df.bucket[m]), s, s + dur)
         for c, v in f.items():
             df.loc[m, c] = v
-    df["level"] = df.idx
+    on_event_day = df.zone.isin(ev.zone_id) & df.bucket.dt.date.isin(set(ev.scheduled_start.dt.date))
+    assert df.loc[~on_event_day, "event_nearby"].eq(0).all(), "event features leak outside event days"
+    df["level"] = df.idx_a
 
-    # targets: same zone, exactly h minutes later
-    key = df.set_index(["zone", "bucket"]).idx
+    # targets: same zone, exactly h minutes later, on trip-half B; never across a split boundary
+    key = df.set_index(["zone", "bucket"])
     for h in HORIZONS:
         fut = pd.MultiIndex.from_arrays([df.zone, df.bucket + pd.Timedelta(minutes=h)])
-        df[f"ratio_{h}"] = key.reindex(fut).to_numpy() / df.idx.to_numpy()
+        same_split = key.split.reindex(fut).to_numpy() == df.split.to_numpy()
+        r = key.idx_b.reindex(fut).to_numpy() / df.idx_b.to_numpy()
+        df[f"ratio_{h}"] = np.where(same_split, r, np.nan)
         df[f"drop10_{h}"] = (df[f"ratio_{h}"] <= 0.9).astype(float).where(df[f"ratio_{h}"].notna())
     return df
 

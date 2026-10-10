@@ -62,7 +62,7 @@ Fill in as they're created; keep them working.
  "model_version": "lgbm_v1", "evidence": {"metrics": "reports/metrics.md"}}
 ```
 - `expected_rm`, savings and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
-- `learned_effect` is `null` unless `reports/event_effect.md` validated it; then the event is listed without a number.
+- `learned_effect` is `null` unless `reports/event_effect.md` is VALIDATED (API reads `reports/event_effect.json`) **and** the event has a published `end`; otherwise the event is listed without a number.
 - Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
 - `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
 - `GET /api/metrics` → contents of `reports/metrics.md` and `reports/event_effect.md` as JSON.

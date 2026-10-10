@@ -27,7 +27,9 @@ VARIANTS = {"no_level": NO_LEVEL, "with_level": WITH_LEVEL}
 def load_frame() -> pd.DataFrame:
     cache = PROC / "frame.parquet"
     src = PROC / "windows.parquet"
-    if cache.exists() and cache.stat().st_mtime > src.stat().st_mtime:
+    inputs = [src, ROOT / "ml" / "features.py", ROOT / "data" / "events" / "nyc_events_2024-08.csv",
+              ROOT / "data" / "weather" / "nyc_central_park_2024-08.csv"]
+    if cache.exists() and cache.stat().st_mtime > max(p.stat().st_mtime for p in inputs):
         return pd.read_parquet(cache)
     df = build_frame(pd.read_parquet(src))
     df.to_parquet(cache, index=False)

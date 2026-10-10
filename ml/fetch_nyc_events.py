@@ -2,6 +2,7 @@
 
 - Yankee Stadium / Citi Field: MLB home games from statsapi.mlb.com (first pitch + game duration, so
   start/end are real). Postponed games are dropped (they reappear as the makeup game).
+  scheduled_start = the schedule's gameDate (known in advance); model features use only this.
 - Madison Square Garden / Barclays Center: concerts listed on setlist.fm for Aug 2024. No sourced
   start/end time exists, so start/end are left empty and these rows are NOT used for timing features.
 Zone IDs: venue coordinates matched point-in-polygon to NYC TLC taxi zones (NYC Open Data, 2025 file).
@@ -57,9 +58,10 @@ def mlb_rows() -> list[dict]:
                 end = start + timedelta(minutes=info["gameDurationMinutes"])
                 zone, lat, lon = VENUES[venue]
                 away = g["teams"]["away"]["team"]["name"]
+                sched = datetime.fromisoformat(g["gameDate"].replace("Z", "+00:00")).astimezone(NY)
                 rows.append(dict(id=f"mlb-{pk}", name=f"MLB: {away} at {g['teams']['home']['team']['name']}",
                                  venue=venue, zone_id=zone, lat=lat, lon=lon, date=start.date().isoformat(),
-                                 start=start.isoformat(), end=end.isoformat(),
+                                 scheduled_start=sched.isoformat(), start=start.isoformat(), end=end.isoformat(),
                                  attendance=info.get("attendance", ""), source_url=url))
     return rows
 
@@ -69,7 +71,7 @@ def main() -> None:
     for i, (day, name, venue, url) in enumerate(SETLISTS):
         zone, lat, lon = VENUES[venue]
         rows.append(dict(id=f"setlist-{i}", name=name, venue=venue, zone_id=zone, lat=lat, lon=lon,
-                         date=day, start="", end="", attendance="", source_url=url))
+                         date=day, scheduled_start="", start="", end="", attendance="", source_url=url))
     rows.sort(key=lambda r: (r["date"], r["start"]))
     with OUT.open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
