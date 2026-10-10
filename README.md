@@ -36,8 +36,12 @@ The headline is **the chance that waiting 30 min gets a price ≥ 10% lower**, n
 | Odds are calibrated (test days, isotonic fit on val) | top decile: predicted 23.3%, observed 23.3% | `reports/metrics.md` §2 |
 | Odds rise with "price ÷ usual price" | jam demo (≈1.9× usual): 45% vs usual 12% | `GET /api/demo` |
 | Ranking good vs bad moments | ROC-AUC 0.589 (0.5 = coin flip) | `reports/metrics.md` §2 |
-| "Tunggu" rule beats "book now"? | **Yes** — +0.22% overall; **+4.5% when price ≥ 1.5× usual**; 4 in 10 waits still cost more | `reports/decision.json` |
-| …and beats the hour-of-day rule? | **No — ties** (+0.29%) | `reports/decision.json` |
+| "Tunggu" rule beats "book now"? | **Yes** — +0.22% overall; 4 in 10 waits still cost more | `reports/decision.json` |
+| …and beats the hour-of-day rule? | **No** — the hour-of-day rule saves slightly more (+0.29% vs +0.22%) | `reports/decision.json` |
+| When price ≥ 1.5× usual? | Waiting saved ~4.5%, but high prices fall back anyway (time-of-day rule +5.1%, always wait 30 min +4.1%) | `reports/decision.json` |
+
+Disclosure: the gate for showing "Tunggu" was changed on 10 Oct 2026 after we saw test results (originally it had
+to beat both baselines and failed); treat the "Tunggu" result as exploratory.
 
 So the app says **"Tunggu X min"** when the odds are clearly above usual, otherwise **book now**, and always
 shows how often waiting still cost more in tests.

@@ -141,11 +141,12 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                        "so it only advises waiting when time-of-day patterns are clear")
     if wait:
         surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
-        ev = (f"when prices were ≥ 1.5x usual, waiting saved {gate['level_ge_1_5']['saving']:.0%} on average"
-              if surge else f"when we said wait, it saved {gate['saving_when_wait']:.1%} on average")
-        reasons.append(f"Tunggu {best.minutes} min: odds of a ≥10% drop are {mults[best.minutes]:.1f}x the usual. "
-                       f"In tests on held-out ride data, {ev}; "
-                       f"{(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
+        ev = (f"in NYC tests, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
+              f"~{gate['level_ge_1_5']['saving']:.0%} on average; a simple time-of-day rule did as well)"
+              if surge else f"in NYC tests, when this rule said wait it saved {gate['saving_when_wait']:.1%} "
+              "on average (a simple time-of-day rule saved slightly more overall)")
+        reasons.append(f"Tunggu {best.minutes} min: odds of a ≥10% drop are {mults[best.minutes]:.1f}x the usual; "
+                       f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high:
         reasons.append("Odds of a drop are above usual, but the waiting rule is not validated — book now")
     else:

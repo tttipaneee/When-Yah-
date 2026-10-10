@@ -14,16 +14,12 @@
    "wait_rate": 0.3661,
    "saving_when_wait": 0.0063,
    "waits_cost_more": 0.454,
-   "level_ge_1_5": {
-    "windows": 255,
-    "saving": 0.0519,
-    "saving_ci": [
-     0.0355,
-     0.066
-    ],
-    "waits_cost_more": 0.277
-   },
-   "vs_hour_of_day": "ties"
+   "vs_hour_of_day": "loses to",
+   "minus_hour_of_day": [
+    -0.00057,
+    -0.00095,
+    -0.00015
+   ]
   },
   "with_level": {
    "validated": true,
@@ -36,16 +32,24 @@
    "wait_rate": 0.1547,
    "saving_when_wait": 0.0144,
    "waits_cost_more": 0.414,
+   "vs_hour_of_day": "loses to",
+   "minus_hour_of_day": [
+    -0.00064,
+    -0.00104,
+    -0.00025
+   ],
    "level_ge_1_5": {
     "windows": 255,
+    "wait_rate": 1.0,
     "saving": 0.0449,
     "saving_ci": [
      0.0262,
      0.0632
     ],
-    "waits_cost_more": 0.38
-   },
-   "vs_hour_of_day": "ties"
+    "waits_cost_more": 0.38,
+    "hour_of_day_saving": 0.0513,
+    "always_wait_30_saving": 0.0406
+   }
   }
  }
 }

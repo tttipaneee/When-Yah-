@@ -18,9 +18,10 @@ odds when the fare is far above normal (≈2× usual → ~45%).
 **Proof.** On held-out real ride data (19M NYC Uber/Lyft trips, Aug 2024) the odds are **calibrated**
 (when we say ~21%, it happened 21% of the time) and rise sharply when the price is far above normal.
 The "Tunggu" advice (wait 15–60 min when the odds of a ≥10% drop are clearly above usual; threshold set on
-validation days) **beats "book now" on held-out days** (+0.22% on all windows; **+4.5% when the price is ≥1.5×
-usual**), and **ties** a simple "hour-of-day" rule — we say so (`reports/decision.json`). When it says wait,
-about 4 in 10 waits still cost more; the app shows that. Experiments that failed are listed in §10.
+validation days) **beats "book now" on held-out days** (+0.22%) but a simple "hour-of-day" rule saves slightly
+more (+0.29%) — we say so (`reports/decision.json`). When prices are ≥1.5× usual they tend to fall back (~4–5%)
+whatever rule is used. About 4 in 10 waits still cost more; the app shows that. The "Tunggu" gate was changed
+after seeing test results (disclosed in `reports/metrics.md`) — exploratory. Experiments that failed are listed in §10.
 
 **Evidence rule.** Every number traces to real data or a cited, dated source. No invented fares,
 multipliers or per-app prices (see `CLAUDE.md`).
@@ -116,7 +117,7 @@ source (model metrics, user input, cited event page).
    inputs tested and rejected: second quote/trend (`reports/trend_experiment.md`), borough averaging
    (`reports/borough_experiment.md`, AUC 0.88 on 23 events but no savings gain), traffic and "why is it
    high" (`reports/traffic_experiment.md`). The "Tunggu" rule beats book-now but only ties the hour-of-day
-   rule (`reports/decision.json`); savings concentrate in surges (price ≥ 1.5× usual).
+   rule: it slightly **loses** to the hour-of-day rule (paired test); savings concentrate in surges.
 2. Few events in the data period → event effect may not validate → show events without numbers.
 3. Surge is hard to predict (a Chicago project reached ~25% precision) → probabilities and savings vs baselines.
 4. US patterns applied to KL → state it plainly; roadmap: users' typed quotes become Malaysian training data.
