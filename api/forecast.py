@@ -139,14 +139,14 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         at = lambda m: (req.datetime + timedelta(minutes=m)).strftime("%H:%M")
         if wait and tm.get(best.minutes, 0) >= JAM_FACTOR * now_min:
             wait, flipped = False, True
-            traffic_reason = (f"Book now — jam coming: trip {now_min:.0f} min if you leave now vs "
+            traffic_reason = (f"Book now — jam coming: trip {now_min:.0f} min if you leave at {at(0)} vs "
                               f"{tm[best.minutes]:.0f} min at {at(best.minutes)} ({src})")
         elif jam:
-            traffic_reason = (f"Traffic predicted to build: trip {now_min:.0f} min now, {tm[worst]:.0f} min if you "
+            traffic_reason = (f"Traffic predicted to build: trip {now_min:.0f} min at {at(0)}, {tm[worst]:.0f} min if you "
                               f"leave at {at(worst)} ({src})")
         else:  # no jam: show the trip times as information
             m_ = best.minutes if (wait and best.minutes in tm) else max(tm)
-            traffic_reason = (f"Traffic: trip {now_min:.0f} min if you leave now, {tm[m_]:.0f} min at "
+            traffic_reason = (f"Traffic: trip {now_min:.0f} min if you leave at {at(0)}, {tm[m_]:.0f} min at "
                               f"{at(m_)} ({src}) — no jam predicted")
         traffic = TrafficInfo(source=src, minutes=tm, jam_ahead=jam,
                               flipped_to_book_now=flipped)
