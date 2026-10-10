@@ -278,13 +278,20 @@ export default function App() {
   $("zoneChip").onclick=function(){openZone(this)};
   $("swap").onclick=function(){var t=state.from;state.from=state.to;state.to=t;syncFields(true)};
 
-  /* ---------- quotes ---------- */
-  function renderQuotes(){
+  // App logo from web/public/apps/<id>.png (or .svg), supplied by the team; initials if the file is missing.
+  // Logos belong to their owners; the app is not connected to or affiliated with these companies.
+  var APP_FILE={"Grab":"grab","inDrive":"indrive","GV Ride":"gvride"};
+  function appBadge(app,ini){
+    var id=APP_FILE[app];
+    return '<span class="av">'+esc(ini)+(id?'<img src="/apps/'+id+'.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src=\'/apps/'+id+'.svg\'}else{this.remove()}">':'')+'</span>';
+  }
+
+  /* ---------- quotes ---------- */  function renderQuotes(){
     $("quotes").innerHTML=state.quotes.map(function(q,i){
       var opts=APPS.map(function(a){return '<option'+(a===q.app?' selected':'')+'>'+a+'</option>'}).join("");
       var ini=q.app==="Other app"?"?":q.app.charAt(0).toUpperCase()+(q.app==="GV Ride"?"V":q.app==="inDrive"?"D":"");
       return '<div class="qrow">'+
-        '<div class="sel"><span class="av">'+esc(ini)+'</span><select id="app'+i+'" data-i="'+i+'" aria-label="E-hailing app '+(i+1)+'">'+opts+'</select>'+
+        '<div class="sel">'+appBadge(q.app,ini)+'<select id="app'+i+'" data-i="'+i+'" aria-label="E-hailing app '+(i+1)+'">'+opts+'</select>'+
         '<svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>'+
         '<div class="amt"><span>RM</span><input id="price'+i+'" data-i="'+i+'" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00" aria-label="Price shown in '+esc(q.app)+'"></div>'+
         (state.quotes.length>1?'<button class="x" type="button" data-rm="'+i+'" aria-label="Remove '+esc(q.app)+'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>':'')+
@@ -406,7 +413,7 @@ export default function App() {
     rows.sort(function(a,b){return a.later-b.later});
     $("rank").innerHTML=rows.length?rows.map(function(r,i){
       var ini=r.app==="Other app"?"?":r.app.charAt(0).toUpperCase()+(r.app==="GV Ride"?"V":r.app==="inDrive"?"D":"");
-      return '<div class="rk'+(i===0?' best':'')+'"><span class="av">'+esc(ini)+'</span><span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):bestMin===0?rm(r.now-rows[0].now)+" more than "+esc(rows[0].app):"Now "+rm(r.now))+'</small></span>'+
+      return '<div class="rk'+(i===0?' best':'')+'">'+appBadge(r.app,ini)+'<span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):bestMin===0?rm(r.now-rows[0].now)+" more than "+esc(rows[0].app):"Now "+rm(r.now))+'</small></span>'+
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
@@ -785,12 +792,10 @@ export default function App() {
 
         <header className="top">
           <div className="brand">
-            <div className="logo" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C4F135" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 8.5V13l3 2"/><path d="M9 2.5h6"/></svg>
-            </div>
+            <img className="logo" src="/icon.svg" alt="" aria-hidden="true" />
             <div>
               <div className="hello">Welcome back</div>
-              <div className="title">When Yah?</div>
+              <div className="title wordmark">When Yah<span className="q">?</span></div>
             </div>
           </div>
           <div className="top-chips">
@@ -798,7 +803,7 @@ export default function App() {
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>
               <span id="ptsVal">0</span> pts
             </button>
-            <div className="chip"><span className="dot"></span>Klang Valley</div>
+            <div className="chip" title="Klang Valley"><span className="dot"></span>KL</div>
           </div>
         </header>
 
@@ -834,6 +839,7 @@ export default function App() {
             </div>
           </div>
           <div id="quotes" className="stack" style={{gap: "8px"}}></div>
+          <p className="note affil">Logos belong to their owners. When Yah? is not connected to or affiliated with Grab, inDrive or GV Ride.</p>
           <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
           <label className="usual-box" htmlFor="usual">
             <span className="usual-top"><b>What do you usually pay for this trip?</b><em>Optional</em></span>
