@@ -87,6 +87,18 @@ Fill in as they're created; keep them working.
   = jam: "Wait" flips to "Book now — jam coming". If a Grab quote's trip gets ≥ 10% (and 3 min) longer later, the reason adds
   that Grab's fare includes a per-minute charge (Grab fare structure, Jan 2023), in words only. Minutes only — traffic is **not** a price-model input
   (`reports/traffic_experiment.md`).
+- Forecast also returns `situation` ∈ `jam_coming | event_exit | surge | pricey | rush_hour | normal` (first match:
+  jam ahead, exit-hint window, level ≥ 1.5, level ≥ 1.2, expected rise ≥ 1.5%) and `urgency` ∈ `urgent | wait | no_gain`
+  (`wait` iff decision is wait; `urgent` if jam ahead, event ending soon or rising). Labels only, no new numbers.
+- "Booked? Tell us what you paid" card: app + RM paid, stored in the browser's localStorage (`whenyah.fares`) only,
+  never sent; the thank-you compares the typed quote (and the expected price after waiting, if advised) with the fare paid.
+- Points + Leaderboard (frontend only, localStorage `whenyah.points`): forecast the user asked for = 10 pts + 5 per
+  extra quoted app (max 3), same route within 10 min = 0; fare report = 25 pts once per forecast; 150 pts/day cap.
+  Leaderboard tab (trophy) + header points chip. The six friends are **labelled example data** ("Example friends — not
+  real users"), scored around the user's points at first look each week; no friends map, no location sharing.
+- `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-sonnet-5-5`, effort low, runs automatically as the "Why" text,
+  server-side refusal fallback on) explains the server-recomputed forecast from a facts JSON only; any number in the
+  answer that is not in the facts → rejected, `ai: false`. Needs `ANTHROPIC_API_KEY` in `.env`; without it `ai: false`.
 - `GET /api/case_studies` → `reports/case_studies.json` (event exit curve, surge fall-back table; same numbers as
   `reports/case_studies.md`, checked by a test). Shown in the "What we saw in real ride data" card (no city named there).
 - `GET /api/demo` → presenter scenarios `[{id, title, label: "example…", request, response}]` (real forecast, example prices).
@@ -98,7 +110,9 @@ Fill in as they're created; keep them working.
   were measured) or `in_area` (≤ 5 km, product choice, information only). The map draws a dashed 1 km circle per venue.
   Exit hint: for a `right_here` event with a published `end`, from 30 min before to 45 min after it, a reason starting
   "Event ending right here" says in words (no %) that prices next to a venue went up after big events ended.
-- `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `structured` (`reports/metrics.json`: policies, AUC,
+- Metrics tab opens the "How we know" Proof screen built only from `/api/metrics` (calibration dots, policy savings vs
+  book-now and the time-of-day rule, ≥1.5× case, AUC, tested experiments, fare check).
+- `GET /api/metrics` → `{metrics, event_effect}` (report texts) + `fare_check` (`reports/fare_check.json`) + `structured` (`reports/metrics.json`: policies, AUC,
   calibration table), `decision`, `event_effect_summary`, `experiments` (result lines of each experiment report).
 - `learned_effect` is currently always `null` for Malaysian events (the validated effect is NYC baseball only).
 Changing the contract: update this section and tell both teammates.

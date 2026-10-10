@@ -69,6 +69,14 @@ export function runModel(inp: ModelInput): Promise<any> {
   return lastResult
 }
 
+/** Claude explains this forecast in plain words (server recomputes the forecast; answers with numbers not in it are rejected). */
+export function explainForecast(inp: ModelInput): Promise<{ ai: boolean; text: string | null; reason?: string }> {
+  return fetch("/api/explain", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestBody(inp)),
+  }).then((r) => (r.ok ? r.json() : { ai: false, text: null, reason: `server error ${r.status}` }))
+    .catch(() => ({ ai: false, text: null, reason: "API not reachable" }))
+}
+
 export const APP_ID_TO_NAME: Record<string, string> = { grab: "Grab", indrive: "inDrive", gvride: "GV Ride" }
 
 export interface RealEvent {
@@ -85,6 +93,11 @@ export function fetchEventsToday(): Promise<RealEvent[]> {
 /** Study cases from /api/case_studies (reports/case_studies.json = numbers of reports/case_studies.md). */
 export function fetchCaseStudies(): Promise<any> {
   return fetch("/api/case_studies").then((r) => (r.ok ? r.json() : null)).catch(() => null)
+}
+
+/** Proof screen data from /api/metrics (reports/metrics.json, decision.json, experiments, fare_check.json). */
+export function fetchMetrics(): Promise<any> {
+  return fetch("/api/metrics").then((r) => (r.ok ? r.json() : null)).catch(() => null)
 }
 
 /** Great-circle distance in km. */

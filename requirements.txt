@@ -8,3 +8,4 @@ uvicorn>=0.29
 pydantic>=2.6
 httpx>=0.27   # FastAPI TestClient for API tests
 pytest>=8
+anthropic>=1.0   # optional: 'Explain this in plain words' (POST /api/explain), needs ANTHROPIC_API_KEY in .env

@@ -224,3 +224,40 @@ def test_no_hundred_percent_drop_chance():
     # audit fix: a thin isotonic top step must not show "100% chance" (ml.train.drop_prob caps it)
     for s in client.get("/api/demo").json():
         assert all(h["p_drop10"] < 0.9 for h in s["response"]["horizon"])
+
+
+def test_situation_and_urgency_follow_the_outputs():
+    for hh in (8, 13, 18, 22):
+        for usual in (None, 20.0):
+            body = {**BODY, "datetime": f"2026-10-16T{hh:02d}:10:00+08:00",
+                    "quotes": [{"app": "grab", "price_rm": 40.0}], "usual_price_rm": usual}
+            d = client.post("/api/forecast", json=body).json()
+            assert (d["urgency"] == "wait") == (d["decision"] == "wait")
+            if usual is None:
+                assert d["situation"] not in ("surge", "pricey")  # level unknown without a usual price
+            elif d["situation"] != "event_exit" and d["situation"] != "jam_coming":
+                assert d["situation"] == "surge"  # 40 / 20 = 2x usual
+    jam = {**BODY, "quotes": [{"app": "grab", "price_rm": 15.0}], "usual_price_rm": 15.0,
+           "traffic_min": {"0": 20, "15": 30, "30": 32}}
+    d = client.post("/api/forecast", json=jam).json()
+    assert d["situation"] == "jam_coming" and d["urgency"] in ("urgent",)
+    zepp = {"lat": 3.1394413, "lon": 101.7091281}
+    d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp}).json()
+    from api.forecast import event_effect
+    if event_effect():
+        assert d["situation"] == "event_exit" and d["urgency"] in ("urgent", "wait")
+
+
+def test_explain_rejects_invented_numbers_and_works_without_key(monkeypatch):
+    import api.explain as ex
+    from api.schemas import ForecastRequest
+    req = ForecastRequest(**{**BODY, "quotes": [{"app": "grab", "price_rm": 30.0}], "usual_price_rm": 20.0})
+    f = ex.facts(req)
+    assert "Grab" in f["your_prices"] and f["your_prices"]["Grab"] == "RM30.00"
+    lo_hi = f["likely_price_in_30_min"]["Grab"]
+    assert ex.unsupported_numbers(f"Your Grab RM30.00 will likely be {lo_hi} in 30 min.", f) == []
+    assert ex.unsupported_numbers("You could save RM7.77 if you wait.", f) == ["7.77"]
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(ex, "_ENV", "/nonexistent/.env")
+    r = client.post("/api/explain", json={**BODY, "quotes": [{"app": "grab", "price_rm": 30.0}]}).json()
+    assert r["ai"] is False and r["text"] is None
