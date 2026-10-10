@@ -882,12 +882,10 @@ export default function App() {
           </div>
           <div id="quotes" className="qwrap"></div>
           <button className="usual-toggle" id="usualToggle" type="button" aria-expanded="false" aria-controls="usualBox">+ Add usual price <em>(optional)</em></button>
-          <label className="usual-box" htmlFor="usual" id="usualBox" hidden>
-            <span className="usual-top"><b>Usual price</b><em>Optional</em></span>
-            <span className="usual-in"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="e.g. 18" /></span>
-            <small>What this trip costs on a quiet day. It helps us spot a surge. Not sure? Leave it blank.</small>
+          <label className="qbig qsmall" htmlFor="usual" id="usualBox" hidden>
+            <span className="qq">Usual price on a quiet day</span>
+            <span className="qamt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="0.00" /></span>
           </label>
-          <p className="cta-hint">Tap <b>When Yah?</b> and we'll tell you: book now, or wait and pay less.</p>
           <div className="row-actions">
             <button className="go" id="predict" type="button">
               When Yah?
