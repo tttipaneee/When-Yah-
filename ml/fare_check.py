@@ -24,7 +24,7 @@ REPORT, SUMMARY = ROOT / "reports" / "fare_check.md", ROOT / "reports" / "fare_c
 
 def main() -> None:
     q = pd.read_csv(QUOTES)
-    q = q[q.app == "grab"]
+    q = q[(q.app == "grab") & ~q.note.fillna("").str.startswith("EXCLUDED")]  # off-peak prices only
     cache = json.loads(CACHE.read_text()) if CACHE.exists() else {}
     rows = []
     for _, r in q.iterrows():
