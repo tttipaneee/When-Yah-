@@ -61,11 +61,25 @@ class WaitOdds(BaseModel):
     rm_range: dict[str, list[float]] = {}  # per quoted app: [low, high] RM at `minutes`
 
 
+class Outlook(BaseModel):
+    """One-line prediction: likely price change at `minutes` with a p10-p90 range and the model's main reasons
+    (SHAP groups of the v2 model; why the MODEL predicts it, not a proven cause). Same numbers as `horizon`."""
+    minutes: int
+    pct_change: float
+    pct_low: float
+    pct_high: float
+    because: list[str] = []
+    model: str                       # lgbm_v2 only if reports/v2_verdict.json passed for this variant
+
+
 class UsualPriceEstimate(BaseModel):
     rm: float
     km: float
     min: float
     source: str
+    validated: bool = True                 # false = rough (reports/fare_check.json failed); still labelled in reasons
+    median_abs_error: float | None = None  # measured in the fare check for this method
+    n_quotes: int | None = None
 
 
 class TrafficInfo(BaseModel):
@@ -94,6 +108,7 @@ class ForecastResponse(BaseModel):
     datetime: datetime
     horizon: list[HorizonPoint]
     wait_odds: WaitOdds
+    outlook: Outlook | None = None
     decision: Literal["book_now", "wait"]
     best_time: datetime
     wait_minutes: int
@@ -104,7 +119,7 @@ class ForecastResponse(BaseModel):
     events: list[ForecastEvent] = []
     reasons: list[str]
     model_version: str
-    usual_price_estimate: UsualPriceEstimate | None = None  # null unless reports/fare_check.json passed
+    usual_price_estimate: UsualPriceEstimate | None = None  # with pickup + dropoff; rough unless fare check passed
     traffic: TrafficInfo | None = None  # only when the request carried traffic_min
     # rule-based labels on the outputs above (no new numbers): what kind of moment this is, and how urgent
     situation: Literal["jam_coming", "event_exit", "surge", "pricey", "rush_hour", "normal"] = "normal"

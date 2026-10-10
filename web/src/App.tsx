@@ -3,7 +3,7 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, fetchUsual, kmBetween, klTime } from "./model";
 import { runModel, explainForecast } from "./model";
 
 export default function App() {
@@ -100,6 +100,19 @@ export default function App() {
   // else the OSRM/OpenStreetMap route, which has no traffic. Minutes and km only — no fare.
   var OSRM_ROUTE = null, MODEL_ROUTE = "", ROUTE_NOW = null;  // ROUTE_NOW: {key, km, minutes, source} from /api/route
   function routeKey(){return JSON.stringify([state.from, state.to, state.fromLatLon || null, state.toLatLon || null])}
+  var USUAL_EST = null;  // {key, rm, km, min, source, validated, median_abs_error, time_factor, rm_at_this_time} from /api/usual
+  function showUsualEst(){
+    var el = $("usualEst"), inp = $("usual"), u = USUAL_EST && USUAL_EST.key === routeKey() && USUAL_EST.rm != null && USUAL_EST;
+    if(!el) return;
+    el.hidden = !u;
+    if(inp) inp.placeholder = u ? u.rm.toFixed(2) : "0.00";
+    if(!u) return;
+    var err = u.validated ? "" : (u.median_abs_error != null ? " · rough ±" + Math.round(u.median_abs_error * 100) + "%" : " · rough");
+    el.innerHTML = "Usual ≈ <b>RM " + u.rm.toFixed(2) + "</b> <span class=\"src\">Grab rates + " + u.km + " km route" + err + "</span>" +
+      (u.rm_at_this_time != null ? " · at this hour ≈ <b>RM " + u.rm_at_this_time.toFixed(2) + "</b> <span class=\"src\">model</span>" : "");
+    el.title = u.source + (u.time_source ? ". At this hour: x" + u.time_factor + " (" + "model trained and tested on real ride data" + ")" : "") +
+      ". Used only if you don't type your usual price.";
+  }
   function routeText(){
     var t = MODEL && MODEL_ROUTE === routeKey() && MODEL.traffic;  // only the forecast for this exact route
     if(t && t.minutes && t.minutes["0"] != null && t.km != null)
@@ -128,6 +141,10 @@ export default function App() {
       if(!ROUTE_NOW || ROUTE_NOW.key !== rk) {
         ROUTE_NOW = {key: rk, minutes: null};
         fetchRouteNow(a, b).then(function(d){ if(d && ROUTE_NOW && ROUTE_NOW.key === rk){ ROUTE_NOW = Object.assign({key: rk}, d); showRouteStats(); } });
+      }
+      if(!USUAL_EST || USUAL_EST.key !== rk) {
+        USUAL_EST = {key: rk, rm: null}; showUsualEst();
+        fetchUsual(a, b).then(function(d){ if(d && USUAL_EST && USUAL_EST.key === rk){ USUAL_EST = Object.assign({key: rk}, d); showUsualEst(); } });
       }
       var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(bigLayers);
       fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
@@ -933,6 +950,7 @@ export default function App() {
             </div>
           </div>
           <div id="quotes" className="qwrap"></div>
+          <p className="usual-est" id="usualEst" hidden></p>
           <button className="usual-toggle" id="usualToggle" type="button" aria-expanded="false" aria-controls="usualBox">+ Add usual price <em>(optional)</em></button>
           <label className="qbig qsmall" htmlFor="usual" id="usualBox" hidden>
             <span className="qq">Usual price on a quiet day</span>

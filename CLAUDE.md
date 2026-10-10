@@ -47,6 +47,7 @@ Fill in as they're created; keep them working.
 - Trend experiment (second quote): `python -m ml.experiment_trend` (→ `reports/trend_experiment.md`)
 - Borough experiment: `python -m ml.experiment_borough` (→ `reports/borough_experiment.md`; zone→borough from `data/zones/taxi_zones_borough.csv`, NYC Open Data taxi zones export 2025-10-03)
 - Traffic: `python -m ml.traffic && python -m ml.experiment_traffic` (→ `reports/traffic_experiment.md`)
+- Model v2 price line + reasons: `python -m ml.experiment_v2` (→ `reports/metrics_v2.md`, `reports/v2_verdict.json`, `ml/models/lgbm_v2.joblib`; first run builds the September frame from `data/raw/fhvhv_tripdata_2024-09.parquet`, cached in `data/processed/frame_sep.parquet`)
 - Extreme-price calibration: `python -m ml.experiment_extreme` (→ `reports/extreme_experiment.md`)
 - Case studies (event exit + surge fall-back, charts): `python -m ml.case_studies` (→ `reports/case_studies.md`, `reports/case_*.png`; needs matplotlib, dev only)
 - Fare check (needs real off-peak quotes in `data/fares/offpeak_quotes.csv`): `python -m ml.fare_check` (→ `reports/fare_check.md`, gate for `usual_price_estimate`)
@@ -70,6 +71,13 @@ Fill in as they're created; keep them working.
  "reasons": ["Friday evening peak typically eases after 18:30 in training data", "no rain"],
  "model_version": "lgbm_v1", "evidence": {"metrics": "reports/metrics.md"}}
 ```
+- `outlook: {minutes: 30, pct_change, pct_low, pct_high, because: [str], model} | null` — the one-line prediction,
+  same numbers as `horizon` at +30. Since 11 Oct the shown line (`horizon[].pct_change/low/high`) comes from model v2
+  (`ml/model_v2.py`: usual price for this time of week + how far the price is from the user's usual) for each variant
+  where `reports/v2_verdict.json` passed (beat v1 and persistence on test days and Sep 2024); `model` = `lgbm_v2`, and
+  `model_version` gets `+lgbm_v2_line`. `because` = the model's top SHAP groups in words (time of day / price vs
+  normal / rain only if raining / event) — "main reasons in the model", never traffic; `reasons[1]` states it.
+  `p_drop10`, `wait_odds` and the Wait/Book now rule stay v1 (the Wait rule's "falling" check uses v1's line).
 - **`wait_odds` is the headline** (since 10 Oct): chance that waiting 30 min gets a price ≥ 10% lower, vs the
   typical chance (training base rate), plus the p10–p90 range. `reasons[0]` states the odds in words.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
@@ -80,9 +88,15 @@ Fill in as they're created; keep them working.
 - `GET /api/route?from_lat&from_lon&to_lat&to_lon[&at]` → `{km, minutes, source}` (nulls without a TomTom key): trip time
   with traffic for leaving now (or a future `at`), one TomTom call cached per minute, so the map shows it before any
   forecast; after a forecast for the same route, the forecast's `traffic` is used. Minutes only.
-- Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source}` and uses it
-  as the usual price **only if** `reports/fare_check.json` passed (real off-peak quotes vs Grab Jan 2023 rates + OSM
-  route) and the user typed none; otherwise `usual_price_estimate: null`.
+- `GET /api/usual?from_lat&from_lon&to_lat&to_lon[&at]` → `usual_price_estimate` fields + `time_factor`, `rm_at_this_time`,
+  `time_source` (model v2's usual-for-this-hour/weekday factor, reports/metrics_v2.md) | `{rm: null}`: shown on the price
+  card as soon as both places are set ("Usual ≈ RM X · at this hour ≈ RM Y", rough label, also the field's placeholder).
+  The forecast uses the formula value only.
+- Optional request `dropoff: {lat, lon}`; with `pickup` it fills `usual_price_estimate: {rm, km, min, source, validated,
+  median_abs_error, n_quotes}` (Grab Jan 2023 rates + TomTom route, else OSM route). If the user typed no usual price,
+  it is used as the usual price (product decision, Ravin 11 Oct) — `validated: false` while `reports/fare_check.json`
+  fails, and a reason says "No usual price typed: using an estimated usual price of RM X (… rough: off by N% (median)
+  on M real quotes in our check)". A typed usual price always wins.
 - Potential traffic: optional request `traffic_min: {minutes_from_now: trip_minutes}`; if absent and `pickup` + `dropoff`
   are given, the API asks TomTom Routing (traffic-aware, `departAt` now/+15/+30/+45/+60; needs `TOMTOM_API_KEY` in `.env`).
   Response `traffic: {source, minutes, jam_ahead, flipped_to_book_now, km} | null` (`km` = TomTom route length for

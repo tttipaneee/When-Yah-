@@ -39,3 +39,33 @@ def get_route(from_lat: float, from_lon: float, to_lat: float, to_lon: float, at
     depart = at.replace(second=0, microsecond=0).isoformat() if at and now and at > now + timedelta(minutes=2) else None
     a, b = (round(from_lat, 5), round(from_lon, 5)), (round(to_lat, 5), round(to_lon, 5))
     return _route_now(a, b, depart, datetime.utcnow().strftime("%Y-%m-%dT%H:%M"))
+
+
+@lru_cache(maxsize=512)
+def _usual(a: tuple[float, float], b: tuple[float, float], at_iso: str) -> dict | None:
+    from api.fare import estimate
+    return estimate(a, b, datetime.fromisoformat(at_iso))
+
+
+@router.get("/api/usual")
+def get_usual(from_lat: float, from_lon: float, to_lat: float, to_lon: float, at: datetime | None = None) -> dict:
+    """Estimated usual price for the route, shown before any forecast:
+    formula = Grab published rates (Jan 2023) x route km/minutes (api/fare.py), rough unless reports/fare_check.json
+    passed; trained = model v2's usual price for this hour/weekend vs a place's usual (NYC ride data,
+    reports/metrics_v2.md), as a factor. The forecast uses the formula value only (never the factor)."""
+    from zoneinfo import ZoneInfo
+    from api.forecast import load_v2
+    kl = ZoneInfo("Asia/Kuala_Lumpur")
+    t = (at.astimezone(kl) if at and at.tzinfo else at.replace(tzinfo=kl)) if at else datetime.now(kl)
+    a, b = (round(from_lat, 5), round(from_lon, 5)), (round(to_lat, 5), round(to_lon, 5))
+    est = _usual(a, b, t.replace(second=0, microsecond=0).isoformat())
+    if not est:
+        return {"rm": None}
+    out = dict(est)
+    v2 = load_v2()
+    if v2 is not None:
+        f = float(v2["normal_table"].get((int(t.weekday() >= 5), t.hour), 1.0))
+        out.update(time_factor=round(f, 3), rm_at_this_time=round(est["rm"] * f, 2),
+                   time_source="usual price by hour and weekday vs a place's usual, NYC ride data Aug 2024 "
+                               "(reports/metrics_v2.md)")
+    return out

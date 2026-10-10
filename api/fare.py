@@ -1,4 +1,6 @@
-"""Estimated normal (usual) Grab fare for a route — used ONLY if reports/fare_check.json passed.
+"""Estimated normal (usual) Grab fare for a route. Validated only if reports/fare_check.json passed; otherwise it is
+returned as a ROUGH estimate (validated: false, with the check's measured median error) and used as the usual price
+only when the user typed none (product decision, Ravin 11 Oct) — always labelled as rough.
 
 fare = max(minimum, base + per_km x km + per_min x minutes) with Grab's published Klang Valley rates
 (data/fares/grab_rates.csv, Jan 2023, cited). km/minutes from TomTom (traffic-aware, needs TOMTOM_API_KEY)
@@ -53,22 +55,28 @@ def check() -> dict:
 
 
 def estimate(a: tuple[float, float], b: tuple[float, float], when=None) -> dict | None:
-    """{'rm', 'km', 'min', 'source'} if the fare check passed for an available method, else None."""
+    """{'rm', 'km', 'min', 'source', 'validated', 'median_abs_error', 'n_quotes'}; None if no route is available.
+    Validated method if the fare check passed; else rough: TomTom (smaller error in the check) if it answers, else
+    OSRM, each with its own measured error from reports/fare_check.json."""
     from api.traffic import route_with_traffic  # local import: avoids a cycle at module load
     c = check()
-    if not c.get("passed"):
-        return None
-    method = c.get("method", "osrm")
-    if method == "tomtom":
-        rt = route_with_traffic(a, b, None)
-        label = "TomTom traffic-aware route"
-    else:
-        rt = route(a, b)
-        label = "OpenStreetMap route"
+    passed = bool(c.get("passed"))
+    order = [c.get("method") or "osrm"] if passed else ["tomtom", "osrm"]
+    rt = None
+    for method in order:
+        rt = route_with_traffic(a, b, when) if method == "tomtom" else route(a, b)
+        if rt is not None:
+            break
     if rt is None:
         return None
+    label = "TomTom traffic-aware route" if method == "tomtom" else "OpenStreetMap route"
     km, mins = rt
-    factor = float(c.get("factor", 1.0))
+    factor = float(c.get("factor", 1.0)) if passed else 1.0
+    m = c.get("methods", {}).get(method, {})
+    err = m.get("median_abs_error")
     src = (f"Grab published rates ({rates()['effective']}) + {label}"
-           + (f", x{factor:.2f} fitted on our own off-peak quotes (reports/fare_check.md)" if factor != 1.0 else ""))
-    return {"rm": round(raw_fare(km, mins) * factor, 2), "km": round(km, 1), "min": round(mins), "source": src}
+           + (f", x{factor:.2f} fitted on our own off-peak quotes (reports/fare_check.md)" if factor != 1.0 else "")
+           + ("" if passed else f" — rough: off by {err:.0%} (median) on {m.get('n_quotes')} real quotes in our check"
+              if err is not None else " — rough, not checked against real quotes"))
+    return {"rm": round(raw_fare(km, mins) * factor, 2), "km": round(km, 1), "min": round(mins), "source": src,
+            "validated": passed, "median_abs_error": err, "n_quotes": m.get("n_quotes")}

@@ -14,7 +14,7 @@ def test_forecast_contract_shape():
     d = r.json()
     assert [h["minutes"] for h in d["horizon"]] == [15, 30, 45, 60]
     assert d["decision"] in ("book_now", "wait")
-    assert d["model_version"] == "lgbm_v1/no_level"
+    assert d["model_version"].startswith("lgbm_v1/no_level")
     assert set(d["horizon"][0]["expected_rm"]) == {"grab", "indrive"}
     assert set(d["apps_ranked_now"]) == {"grab", "indrive"}
 
@@ -38,7 +38,7 @@ def test_events_and_metrics():
 
 def test_usual_price_uses_with_level_and_rm_only_from_quotes():
     d = client.post("/api/forecast", json={**BODY, "usual_price_rm": 25.0}).json()
-    assert d["model_version"] == "lgbm_v1/with_level"
+    assert d["model_version"].startswith("lgbm_v1/with_level")
     for h in d["horizon"]:
         assert h["pct_low"] <= h["pct_change"] <= h["pct_high"]
         assert h["expected_rm"]["grab"] == round(38.0 * (1 + h["pct_change"]), 2)
@@ -83,12 +83,19 @@ def test_time_is_read_in_kl_whatever_timezone_was_sent():
     assert utc["datetime"].endswith("+08:00")
 
 
-def test_usual_price_estimate_only_when_fare_check_passed():
-    from api.fare import check
+def test_rough_estimate_used_only_without_typed_usual_and_labelled(monkeypatch):
+    import api.forecast as fc
+    est = {"rm": 20.0, "km": 8.0, "min": 18, "source": "Grab published rates (Jan 2023) + OpenStreetMap route — rough",
+           "validated": False, "median_abs_error": 0.371, "n_quotes": 9}
+    monkeypatch.setattr(fc, "fare_estimate", lambda *a, **k: est)
     body = {**BODY, "pickup": {"lat": 3.158, "lon": 101.7117}, "dropoff": {"lat": 3.1177, "lon": 101.6774}}
     d = client.post("/api/forecast", json=body).json()
-    if not check().get("passed"):
-        assert d["usual_price_estimate"] is None and d["model_version"] == "lgbm_v1/no_level"
+    assert d["model_version"].startswith("lgbm_v1/with_level") and d["usual_price_estimate"]["validated"] is False
+    assert any(r.startswith("No usual price typed: using an estimated usual price of RM 20.00") and "37%" in r
+               for r in d["reasons"])
+    typed = client.post("/api/forecast", json={**body, "usual_price_rm": 30.0}).json()  # typed always wins
+    assert not any(r.startswith("No usual price typed") for r in typed["reasons"])
+    assert any("vs your usual price" in r for r in typed["reasons"])
 
 
 def test_metrics_structured_for_judges_screen():
@@ -299,3 +306,30 @@ def test_route_now_for_the_map(monkeypatch):
     monkeypatch.setattr(t, "route_with_traffic", lambda a, b, d=None, timeout=8: None)  # no key / error
     assert client.get(f"/api/route?{q}").json() == {"km": None, "minutes": None, "source": None}
     rf._route_now.cache_clear()
+
+
+def test_outlook_matches_horizon_and_follows_v2_verdict():
+    import json
+    from pathlib import Path
+    d = client.post("/api/forecast", json={**BODY, "usual_price_rm": 25.0}).json()
+    o, h30 = d["outlook"], next(h for h in d["horizon"] if h["minutes"] == 30)
+    assert (o["pct_change"], o["pct_low"], o["pct_high"]) == (h30["pct_change"], h30["pct_low"], h30["pct_high"])
+    p = Path(__file__).resolve().parent.parent / "reports" / "v2_verdict.json"
+    served = p.exists() and json.loads(p.read_text(encoding="utf-8"))["verdict"].get("with_level")
+    assert o["model"] == ("lgbm_v2" if served else "lgbm_v1")
+    if o["because"]:  # words only, never "traffic" (reports/traffic_experiment.md)
+        assert not any("traffic" in w for w in o["because"])
+        assert d["reasons"][1].startswith("Price in 30 min")
+    assert d["reasons"][0].startswith("Chance that waiting 30 min")  # contract: reasons[0] = the odds
+
+
+def test_usual_endpoint_shape(monkeypatch):
+    import api.routes.forecast as rf
+    est = {"rm": 16.62, "km": 12.8, "min": 27, "source": "Grab published rates + TomTom route — rough", "validated": False,
+           "median_abs_error": 0.176, "n_quotes": 9}
+    monkeypatch.setattr(rf, "_usual", lambda *a: est)
+    d = client.get("/api/usual", params=dict(from_lat=3.158, from_lon=101.7117, to_lat=3.1177, to_lon=101.6774,
+                                             at="2026-10-09T17:30:00+08:00")).json()
+    assert d["rm"] == 16.62 and d["validated"] is False
+    if "time_factor" in d:  # model v2 served: usual price at this hour = formula x the model's hour/weekday factor
+        assert abs(d["rm_at_this_time"] - 16.62 * d["time_factor"]) < 0.02  # factor shown rounded to 3 dp
