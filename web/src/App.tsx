@@ -1,6 +1,9 @@
 // @ts-nocheck
 import React, { useEffect } from "react";
 import "./index.css";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import { PLACE_LATLON } from "./model";
 import { runModel } from "./model";
 
 export default function App() {
@@ -89,6 +92,25 @@ export default function App() {
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 
   /* ---------- map ---------- */
+  
+  var miniMapL = null;
+  var bigMapL = null;
+  var miniLayers = null;
+  var bigLayers = null;
+  
+  function initMaps() {
+    if (!miniMapL) {
+      miniMapL = L.map("miniSvg", {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([3.139, 101.686], 11);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(miniMapL);
+      miniLayers = L.layerGroup().addTo(miniMapL);
+    }
+    if (!bigMapL) {
+      bigMapL = L.map("bigSvg", {zoomControl: false, attributionControl: false}).setView([3.139, 101.686], 12);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(bigMapL);
+      bigLayers = L.layerGroup().addTo(bigMapL);
+    }
+  }
+
   function baseMap(){
     var h="",y;
     for(y=-280;y<480;y+=56){h+='M-60 '+y+'H400';}
@@ -151,39 +173,88 @@ export default function App() {
     var w=Math.max(x1-x0+2*pad,(y1-y0+2*pad)*asp),h=w/asp,cx=(x0+x1)/2,cy=(y0+y1)/2;
     return {w:w,h:h,vb:(cx-w/2)+" "+(cy-h/2)+" "+w+" "+h};
   }
-  function inZone(){var a=place(state.from),v=place(EVENT.at);return Math.hypot(a.x-v.x,a.y-v.y)<=EVENT.r}
+  function inZone(){
+    var a = PLACE_LATLON[state.from], v = PLACE_LATLON[EVENT.at];
+    if(!a || !v) return false;
+    return Math.hypot(a.lat-v.lat, a.lon-v.lon) <= 0.03;
+  }
   function routePath(a,b){
     var ym=(a.y+b.y)/2;
     return "M"+a.x+" "+a.y+" L"+a.x+" "+ym+" L"+b.x+" "+ym+" L"+b.x+" "+b.y;
   }
   function drawMain(animate){
-    var a=place(state.from), b=place(state.to), v=place(EVENT.at);
-    var d=routePath(a,b);
-    var len=Math.abs(a.y-b.y)+Math.abs(a.x-b.x)+10;
-    var fb=fitBox([a,b,v],36,1.07),k=fb.w/94*.6;
-    $("miniSvg").setAttribute("viewBox",fb.vb);
-    $("miniSvg").innerHTML=baseMap()+zoneMarkup(false)+
-      '<path d="'+d+'" fill="none" stroke="#C4F135" stroke-width="'+(9.5*k)+'" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>'+
-      '<path class="route-line'+(animate?' draw':'')+'" style="--len:'+len+'" d="'+d+'" fill="none" stroke="#101410" stroke-width="'+(4.2*k)+'" stroke-linecap="round" stroke-linejoin="round"/>'+
-      pinMarkup(a,"from","",k)+pinMarkup(b,"to","",k);
+    if(!miniLayers) return;
+    miniLayers.clearLayers();
+    var a = PLACE_LATLON[state.from];
+    var b = PLACE_LATLON[state.to];
+    var v = PLACE_LATLON[EVENT.at];
+    if(a && b) {
+      var bounds = L.latLngBounds([ [a.lat, a.lon], [b.lat, b.lon] ]);
+      if(v) bounds.extend([v.lat, v.lon]);
+      miniMapL.fitBounds(bounds, {padding: [20,20]});
+      
+      var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(miniLayers);
+      fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
+        .then(r => r.json())
+        .then(data => {
+           if(data.routes && data.routes[0]) {
+              miniLayers.removeLayer(tempLine);
+              var coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              L.polyline(coords, {color: "#C4F135", weight: 7, opacity: 0.9}).addTo(miniLayers);
+              L.polyline(coords, {color: "#101410", weight: 4}).addTo(miniLayers);
+              // Re-add markers so they are on top
+              L.circleMarker([a.lat, a.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
+              L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
+           }
+        }).catch(e => console.error(e));
+
+      L.circleMarker([a.lat, a.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
+      L.circleMarker([b.lat, b.lon], {radius: 6, color: "#101410", fillColor: "#C4F135", fillOpacity: 1, weight: 2}).addTo(miniLayers);
+    }
+    if(v) {
+      L.circle([v.lat, v.lon], {radius: 2000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.2, weight: 1}).addTo(miniLayers);
+    }
   }
   function drawBig(){
-    var out=baseMap()+zoneMarkup(true,1,{hit:true,tap:true});
-    var a=place(state.from),b=place(state.to);
-    var d=routePath(a,b);
-    out+='<g opacity=".55" pointer-events="none">'+railLine(TRANSIT.STATIONS,2)+'</g>';
-    out+='<g pointer-events="none">'+TRANSIT.STATIONS.filter(function(st){return !PLACES.some(function(p){return p.n===st.n})}).map(function(st){return stationMarker(st,1,false)}).join("")+'</g>';
-    if(state.from&&state.to&&state.from!==state.to){
-      out+='<path d="'+d+'" fill="none" stroke="#C4F135" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>'+
-           '<path d="'+d+'" fill="none" stroke="#101410" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>';
+    if(!bigLayers) return;
+    bigLayers.clearLayers();
+    var a = PLACE_LATLON[state.from];
+    var b = PLACE_LATLON[state.to];
+    var v = PLACE_LATLON[EVENT.at];
+    if(a && b && state.from !== state.to) {
+      var tempLine = L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {color: "#101410", weight: 4, dashArray: "5, 5"}).addTo(bigLayers);
+      fetch("https://router.project-osrm.org/route/v1/driving/" + a.lon + "," + a.lat + ";" + b.lon + "," + b.lat + "?overview=full&geometries=geojson")
+        .then(r => r.json())
+        .then(data => {
+           if(data.routes && data.routes[0]) {
+              bigLayers.removeLayer(tempLine);
+              var coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              L.polyline(coords, {color: "#C4F135", weight: 8, opacity: 0.9}).addTo(bigLayers);
+              L.polyline(coords, {color: "#101410", weight: 4}).addTo(bigLayers);
+              var distKm = (data.routes[0].distance / 1000).toFixed(1);
+              var durMin = Math.round(data.routes[0].duration / 60);
+              var rs = document.getElementById("routeStats");
+              if (rs) rs.innerHTML = "<b>" + durMin + " min</b> driving (" + distKm + " km)";
+           }
+        }).catch(e => console.error(e));
     }
-    PLACES.forEach(function(p){
-      if(p.n===state.from||p.n===state.to)return;
-      out+='<g data-p="'+esc(p.n)+'" role="button" tabindex="0" aria-label="Set '+esc(p.n)+' as '+(state.active==="from"?"pickup":"destination")+'" style="cursor:pointer"><circle cx="'+p.x+'" cy="'+p.y+'" r="14" fill="transparent"/><circle cx="'+p.x+'" cy="'+p.y+'" r="5.5" fill="#fff" stroke="#101410" stroke-width="2.5"/>'+
-      '<text x="'+(p.x>230?p.x-9:p.x+9)+'" y="'+(p.y+4)+'" text-anchor="'+(p.x>230?"end":"start")+'" '+FONT+' font-size="9.5" font-weight="700" fill="#101410" stroke="#F5FBEA" stroke-width="3" paint-order="stroke">'+esc(p.n)+'</text></g>';
+    if(v) {
+      L.circle([v.lat, v.lon], {radius: 2000, color: "#F26B1D", fillColor: "#F26B1D", fillOpacity: 0.2, weight: 1}).addTo(bigLayers);
+    }
+    Object.keys(PLACE_LATLON).forEach(name => {
+       var p = PLACE_LATLON[name];
+       var isFrom = name === state.from, isTo = name === state.to;
+       var color = (isFrom || isTo) ? "#C4F135" : "#fff";
+       var radius = (isFrom || isTo) ? 8 : 5;
+       var marker = L.circleMarker([p.lat, p.lon], {radius: radius, color: "#101410", fillColor: color, fillOpacity: 1, weight: 2}).addTo(bigLayers);
+       marker.bindTooltip(name, {permanent: true, direction: "top", className: "map-label", offset: [0, -10]});
+       marker.on("click", function() {
+          if (state.active === "from") { state.prevFrom = state.from; state.from = name; }
+          else { state.to = name; }
+          drawBig(); syncFields(true); renderPrediction();
+       });
     });
-    out+=pinMarkup(a,"from",a.n)+pinMarkup(b,"to",b.n);
-    $("bigSvg").innerHTML=out;
+    if(a) bigMapL.setView([a.lat, a.lon], 12);
   }
 
   /* ---------- fields ---------- */
@@ -201,13 +272,49 @@ export default function App() {
     $("hint").textContent=w==="from"?"Choose pickup":"Choose destination";
     renderList("");
   }
+    var searchTimer = null;
   function renderList(q){
     q=(q||"").toLowerCase();
     var other=state.active==="from"?state.to:state.from;
-    var items=PLACES.filter(function(p){return p.n!==other&&(p.n.toLowerCase().indexOf(q)>-1||p.s.toLowerCase().indexOf(q)>-1)});
-    $("plist").innerHTML=items.length?items.map(function(p){
-      return '<li><button type="button" data-p="'+esc(p.n)+'"><span class="pi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><span>'+esc(p.n)+'<small>'+esc(p.s)+'</small></span></button></li>';
-    }).join(""):'<li class="empty">No match. Try another name.</li>';
+    
+    // Always show local favorites first
+    var localItems=PLACES.filter(function(p){return p.n!==other&&(p.n.toLowerCase().indexOf(q)>-1||p.s.toLowerCase().indexOf(q)>-1)});
+    
+    function renderHTML(items) {
+      $("plist").innerHTML=items.length?items.map(function(p){
+        return '<li><button type="button" data-p="'+esc(p.n)+'"><span class="pi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></span><span>'+esc(p.n)+'<small>'+esc(p.s)+'</small></span></button></li>';
+      }).join(""):'<li class="empty">No match. Try another name.</li>';
+    }
+
+    if (q.length < 3) {
+      renderHTML(localItems);
+      return;
+    }
+    
+    // Show loading state while typing
+    $("plist").innerHTML = '<li class="empty">Searching map...</li>';
+    
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+       fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(q) + "&countrycodes=my&limit=5")
+         .then(r => r.json())
+         .then(data => {
+            var webItems = data.map(d => {
+               var parts = d.display_name.split(",");
+               var name = parts[0].trim();
+               var sub = parts.slice(1, 3).join(",").trim();
+               // Dynamically register into PLACE_LATLON so the map can route to it!
+               PLACE_LATLON[name] = { lat: parseFloat(d.lat), lon: parseFloat(d.lon) };
+               return { n: name, s: sub, x: 0, y: 0 };
+            });
+            // Combine local matches and web matches
+            var combined = localItems.slice();
+            webItems.forEach(w => { if(!combined.find(c => c.n === w.n)) combined.push(w); });
+            renderHTML(combined);
+         }).catch(e => {
+            renderHTML(localItems);
+         });
+    }, 500);
   }
   function openFs(which,opener,noFocus){
     fsOpener=opener||document.activeElement;
@@ -672,6 +779,7 @@ export default function App() {
 
   document.documentElement.setAttribute("lang","en");
   $("chipText").textContent="Surge zone \u00b7 "+EVENT.name+" at "+EVENT.at;
+  initMaps();
   syncFields(false);renderQuotes();renderPrediction();tick();
 })();
 
@@ -719,7 +827,7 @@ export default function App() {
               </button>
             </div>
             <button className="thumb" id="miniMap" type="button" aria-label="Open full screen map">
-              <svg id="miniSvg" viewBox="40 50 240 130" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Route preview"></svg>
+              <div id="miniSvg" style={{ width: "100%", height: "100%", zIndex: 1, borderRadius: "16px" }}></div>
               <b>Map</b>
             </button>
           </div>
@@ -835,7 +943,7 @@ export default function App() {
     </div>
 
     <div className="fs" id="fs" role="dialog" aria-modal="true" aria-label="Choose route on map" aria-hidden="true">
-      <svg className="fsmap" id="bigSvg" viewBox="0 -185 300 668" preserveAspectRatio="xMidYMid slice" role="group" aria-label="Map of Klang Valley"></svg>
+      <div className="fsmap" id="bigSvg" style={{ zIndex: 1 }}></div>
       <div className="fs-top">
         <button className="back" id="closeFs" type="button" aria-label="Back to home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
         <div className="fs-card">
@@ -846,6 +954,7 @@ export default function App() {
       <button className="fs-chip" id="zoneChip" type="button" aria-haspopup="dialog"><i></i><span id="chipText"></span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
       <div className="fs-bottom">
         <p className="hint" id="hint">Choose pickup</p>
+          <div id="routeStats" className="caption" style={{ justifyContent: "center", margin: "4px 0" }}></div>
         <ul className="plist" id="plist"></ul>
         <button className="go" id="confirm" type="button">Confirm route</button>
       </div>

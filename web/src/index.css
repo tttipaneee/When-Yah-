@@ -292,3 +292,9 @@ button.opt:hover{border-color:var(--ink)}
 @media (prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
+
+.map-label { background: transparent; border: none; box-shadow: none; color: #101410; font-weight: 800; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 12px; text-shadow: 2px 2px 0 #fff, -2px 2px 0 #fff, 2px -2px 0 #fff, -2px -2px 0 #fff; }
+.leaflet-tooltip-top:before { display: none; }
+
+.fs-top, .fs-bottom, .fs-chip, .zs, .res { z-index: 500 !important; }
+.leaflet-container { z-index: 1; font-family: inherit; }
