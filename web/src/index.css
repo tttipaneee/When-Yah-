@@ -410,3 +410,17 @@ button.opt:active{transform:scale(.98)}
 .amt input:focus,.sel select:focus{border-color:var(--ink);box-shadow:0 0 0 4px rgba(196,241,53,.55)}
 .usual-in:focus-within{box-shadow:0 0 0 4px rgba(196,241,53,.55)}
 .qrow{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
+
+/* ---------- Mobbin patterns (Oct 10): inline field helper (Affirm/Klarna), one primary action in the verdict (Deel), icon-led event meta (Luma) ---------- */
+.qfield{display:flex;flex-direction:column;gap:4px}
+.qhelp{margin:0 4px;font-size:11.5px;color:var(--mute);line-height:1.3}
+.dact{margin-top:10px;width:100%;height:44px;border-radius:999px;background:var(--ink);color:var(--lime);font-weight:800;font-size:14px;transition:transform .12s,box-shadow .15s}
+.dact:hover{box-shadow:0 6px 16px -8px rgba(16,20,16,.55)}
+.dact:active{transform:scale(.98)}
+.dact:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.zs-status.ev{align-items:flex-start}
+.zs-status.ev>svg{margin-top:2px}
+.ev-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ev-meta{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;font-weight:600}
+.ev-meta svg{flex:none;opacity:.75;margin-top:2px}
+.ev-body small{font-size:11.5px;font-weight:600;opacity:.85}
