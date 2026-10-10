@@ -58,7 +58,7 @@ def main() -> None:
             print(f"{name:10s} +{h:2d} min: n_train={len(d):,} val_thr={bundle['threshold'][(name, h)]:.3f} "
                   f"({time.time() - t0:.0f}s)")
     MODEL.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(bundle, MODEL)
+    joblib.dump(bundle, MODEL, compress=3)  # committed so the demo runs without the raw data
     print(f"saved {MODEL}")
 
 

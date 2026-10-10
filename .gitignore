@@ -11,3 +11,4 @@ ml/models/*.joblib
 web/node_modules/
 web/dist/
 .pytest_cache/
+!ml/models/lgbm_v1.joblib

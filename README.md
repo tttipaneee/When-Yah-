@@ -23,5 +23,7 @@ scripts/download_data.sh                                      # NYC HVFHV Aug 20
 scripts/run_demo.sh                                           # API :8000 + web :5173
 python -m pytest -q tests                                     # API contract tests
 ```
-`/api/forecast` is a **stub** (`model_version: "stub"`, placeholder percentages) until the model passes
-evaluation in `reports/metrics.md`. RM values are always the user's typed quote × predicted % change.
+`/api/forecast` uses LightGBM models trained on real NYC Uber/Lyft trips (Aug 2024), committed at
+`ml/models/lgbm_v1.joblib`: `model_version` is `lgbm_v1/with_level` when a usual price is given, else
+`lgbm_v1/no_level`. Held-out results and their limits: `reports/metrics.md`. RM values are always the
+user's typed quote × predicted % change.
