@@ -16,4 +16,11 @@ ride-hailing data; prices come from what you type. Not connected to Grab, inDriv
 - `design/` — screen designs (Partner)
 - `KICKOFF_PROMPT.md` — first message to paste into Claude Code
 
-Setup and run commands will be added as the code is built.
+## Run it
+```bash
+pip install -r requirements.txt && (cd web && npm install)   # setup (Python 3.11+, Node 20+)
+scripts/run_demo.sh                                           # API :8000 + web :5173
+python -m pytest -q tests                                     # API contract tests
+```
+`/api/forecast` is a **stub** (`model_version: "stub"`, placeholder percentages) until the model passes
+evaluation in `reports/metrics.md`. RM values are always the user's typed quote × predicted % change.

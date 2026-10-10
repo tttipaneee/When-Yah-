@@ -36,10 +36,11 @@ scripts/         run_demo.sh
 
 ## Commands
 Fill in as they're created; keep them working.
-- Setup: `[TBD]`
-- Check data signal (go/no-go): `[TBD]`
+- Setup: `pip install -r requirements.txt && (cd web && npm install)`
+- Check data signal (go/no-go): `python ml/check_signal_nyc.py data/raw/fhvhv_tripdata_2024-08.parquet`
 - Build dataset / event effect / train / evaluate: `[TBD]`
-- Run demo (API + web): `scripts/run_demo.sh`
+- API tests: `python -m pytest -q tests`
+- Run demo (API + web): `scripts/run_demo.sh` → web http://localhost:5173, API http://localhost:8000/docs
 
 ## API contract (shared by frontend and backend)
 - `GET /api/events?date=YYYY-MM-DD` → `[{id, name, venue, lat, lon, start, end, source_url}]`
@@ -58,7 +59,8 @@ Fill in as they're created; keep them working.
 ```
 - `expected_rm`, savings and rankings exist **only for apps the user quoted**; with no quotes, return percentages only.
 - `learned_effect` is `null` unless `reports/event_effect.md` validated it; then the event is listed without a number.
-- Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`.
+- Horizons: 15, 30, 45, 60 minutes. `decision` ∈ `book_now | wait`. `quotes[].app` ∈ `grab | indrive | gvride` (else 422).
+- `/api/events` and forecast `events`: real rows from `data/events/malaysia_events.csv`; with a pickup, only events within 5 km.
 - `GET /api/metrics` → contents of `reports/metrics.md` and `reports/event_effect.md` as JSON.
 Changing the contract: update this section and tell both teammates.
 
