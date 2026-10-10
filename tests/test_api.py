@@ -332,4 +332,4 @@ def test_usual_endpoint_shape(monkeypatch):
                                              at="2026-10-09T17:30:00+08:00")).json()
     assert d["rm"] == 16.62 and d["validated"] is False
     if "time_factor" in d:  # model v2 served: usual price at this hour = formula x the model's hour/weekday factor
-        assert d["rm_at_this_time"] == round(16.62 * d["time_factor"], 2)
+        assert abs(d["rm_at_this_time"] - 16.62 * d["time_factor"]) < 0.02  # factor shown rounded to 3 dp
