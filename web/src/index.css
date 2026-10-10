@@ -417,8 +417,6 @@ button.opt:active{transform:scale(.98)}
 .qamt input::placeholder{color:var(--line)}
 .qbig:focus-within .qamt{border-color:var(--lime-deep);box-shadow:0 2px 0 var(--lime-deep)}
 .qwrap .qhelp{margin:-8px 0 0}
-.usual-est{margin:4px 0 0;font-size:13px;color:var(--ink)}
-.usual-est .src{color:var(--mute);font-weight:600;font-size:12px}
 .usual-toggle{align-self:flex-start;margin-left:-10px;font-weight:800;font-size:13px;color:var(--ink);padding:6px 10px;border-radius:999px}
 .usual-toggle em{font-style:normal;color:var(--mute);font-weight:600}
 .usual-toggle:hover{background:var(--mint)}

@@ -139,6 +139,7 @@ HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's o
 WALK_OUT_KM = HERE_KM + 0.2  # walk-out point: product choice, a little past the edge of that circle
 JAM_FACTOR = 1.25
 RISE_PCT = 0.015  # "edging up": expected rise at some horizon worth a "book now" note (product threshold)
+MIN_WAIT_RM = 1.50  # product rule (Ravin, 11 Oct): only "Wait" if a 10% drop on the cheapest quote saves >= RM 1.50
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
@@ -188,7 +189,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # v1's line: the rule as validated (reports/decision.json); AND the shown line must fall there too (product rule:
     # never "Wait" next to a flat or rising line; the leakage audit (11 Oct) found 18% of v1 waits had a v2 line >= now)
     falling = v1_pct[best.minutes] < 0 and best.pct_change < 0
-    wait = bool(gate.get("validated")) and odds_high and falling
+    cheapest = min(quotes.values()) if quotes else None
+    too_small = cheapest is not None and 0.10 * cheapest < MIN_WAIT_RM  # no quotes: no RM, rule not applied
+    wait = bool(gate.get("validated")) and odds_high and falling and not too_small
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
     # if waiting puts the trip in much heavier traffic, don't advise waiting.
@@ -268,6 +271,9 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         reasons.append(f"Wait {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
                        f"({mults[best.minutes]:.1f}x the usual); "
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
+    elif odds_high and falling and too_small and gate.get("validated"):
+        reasons.append(f"Book now: even a 10% drop would save only RM {0.10 * cheapest:.2f} on RM {cheapest:.2f} — "
+                       f"under our RM {MIN_WAIT_RM:.2f} minimum to make waiting worth it (product rule)")
     elif odds_high and traffic is not None and traffic.flipped_to_book_now:
         pass  # the traffic reason explains the book-now
     elif odds_high and not falling:

@@ -9,6 +9,9 @@ which of your quoted apps is likely cheapest then, and which real events nearby 
 Every number traces to real data or a cited source: the model is trained and tested on public
 ride-hailing data; prices come from what you type. Not connected to Grab, inDrive or GV Ride.
 
+- **Live app:** https://whenyah-xlj73.ondigitalocean.app/
+- **Pitch deck (Canva):** https://canva.link/shoscveumllm75x
+
 ## Start here
 - `docs/PRD.md` — requirements, timeline split between the two of us, demo script, cut list
 - `CLAUDE.md` — instructions Claude Code reads every session
