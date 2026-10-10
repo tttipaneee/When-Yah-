@@ -286,39 +286,47 @@ export default function App() {
     return '<span class="av">'+esc(ini)+(id?'<img src="/apps/'+id+'.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src=\'/apps/'+id+'.svg\'}else{this.remove()}">':'')+'</span>';
   }
 
-  /* ---------- quotes ---------- */  function renderQuotes(){
-    $("quotes").innerHTML=state.quotes.map(function(q,i){
-      var opts=APPS.map(function(a){return '<option'+(a===q.app?' selected':'')+'>'+a+'</option>'}).join("");
-      var ini=q.app==="Other app"?"?":q.app.charAt(0).toUpperCase()+(q.app==="GV Ride"?"V":q.app==="inDrive"?"D":"");
-      return '<div class="qrow">'+
-        '<div class="sel">'+appBadge(q.app,ini)+'<select id="app'+i+'" data-i="'+i+'" aria-label="E-hailing app '+(i+1)+'">'+opts+'</select>'+
-        '<svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>'+
-        '<div class="amt"><span>RM</span><input id="price'+i+'" data-i="'+i+'" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00" aria-label="Price shown in '+esc(q.app)+'"></div>'+
-        (state.quotes.length>1?'<button class="x" type="button" data-rm="'+i+'" aria-label="Remove '+esc(q.app)+'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>':'')+
-      '</div>';
-    }).join("");
-    $("addApp").disabled=state.quotes.length>=APPS.length;
-    $("bidNote").hidden=!state.quotes.some(function(q){return q.app==="inDrive"});
+  /* ---------- quotes: one big RM field for the selected app (Affirm-style), app chips above ---------- */
+  var ACTIVE="Grab";
+  function activeQuote(){
+    var q=state.quotes.filter(function(x){return x.app===ACTIVE})[0];
+    if(!q){q={app:ACTIVE,price:0};state.quotes.push(q)}
+    return q;
+  }
+  // team-supplied logo from web/public/apps/<id>.png|svg; if neither file exists the logo is simply left out
+  function appLogo(app){
+    var id=APP_FILE[app];if(!id)return "";
+    return '<img class="qlogo" src="/apps/'+id+'.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src=\'/apps/'+id+'.svg\'}else{this.remove()}">';
+  }
+  function chipPrice(app){var q=state.quotes.filter(function(x){return x.app===app})[0];return q&&q.price>0?rm(q.price):""}
+  function renderQuotes(){
+    var q=activeQuote(),name=ACTIVE==="Other app"?"your other app":ACTIVE;
+    var help=ACTIVE==="inDrive"?"Type the fare you offered or were offered.":"";  // the question already says it for other apps
+    $("quotes").innerHTML='<div class="qchips" role="group" aria-label="Choose the app">'+APPS.map(function(app){
+        return '<button type="button" class="qchip" data-app="'+esc(app)+'" aria-pressed="'+(app===ACTIVE)+'">'+
+          '<span class="qname">'+appLogo(app)+esc(app==="Other app"?"Other":app)+'</span><em data-chip="'+esc(app)+'">'+chipPrice(app)+'</em></button>';
+      }).join("")+'</div>'+
+      '<label class="qbig" for="qPrice"><span class="qq">What does <b>'+esc(name)+'</b> show?</span>'+
+      '<span class="qamt"><span>RM</span><input id="qPrice" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00"'+(help?' aria-describedby="qHelp"':'')+'></span></label>'+
+      (help?'<p class="qhelp" id="qHelp">'+help+'</p>':'');
+  }
+  function selectApp(app,focus){
+    ACTIVE=app;renderQuotes();
+    if(focus){var i=$("qPrice");if(i)i.focus({preventScroll:true})}
   }
   $("quotes").addEventListener("input",function(e){
-    var t=e.target;if(t.tagName!=="INPUT")return;
-    var v=parseFloat(t.value);state.quotes[+t.dataset.i].price=isFinite(v)&&v>0?v:0;renderPrediction();
-  });
-  $("quotes").addEventListener("change",function(e){
-    var t=e.target;if(t.tagName!=="SELECT")return;
-    state.quotes[+t.dataset.i].app=t.value;renderQuotes();renderPrediction();
+    var t=e.target;if(t.id!=="qPrice")return;
+    var v=parseFloat(t.value);activeQuote().price=isFinite(v)&&v>0?v:0;
+    var em=document.querySelector('[data-chip="'+ACTIVE+'"]');if(em)em.textContent=chipPrice(ACTIVE);
+    renderPrediction();
   });
   $("quotes").addEventListener("click",function(e){
-    var b=e.target.closest("button[data-rm]");if(!b)return;
-    state.quotes.splice(+b.dataset.rm,1);renderQuotes();renderPrediction();
+    var b=e.target.closest("button[data-app]");if(b)selectApp(b.getAttribute("data-app"),true);
   });
   $("usual").addEventListener("input",function(){var v=parseFloat(this.value);state.usual=isFinite(v)&&v>0?v:0;renderPrediction()});
-  $("addApp").onclick=function(){
-    var used=state.quotes.map(function(q){return q.app});
-    var next=APPS.filter(function(a){return used.indexOf(a)<0})[0];
-    if(!next)return;
-    state.quotes.push({app:next,price:0});renderQuotes();renderPrediction();
-    var inp=$("price"+(state.quotes.length-1));if(inp)inp.focus();
+  $("usualToggle").onclick=function(){
+    var box=$("usualBox"),open=box.hidden;box.hidden=!open;this.setAttribute("aria-expanded",String(open));
+    if(open)$("usual").focus({preventScroll:true});
   };
 
   /* ---------- prediction ---------- */
@@ -342,8 +350,8 @@ export default function App() {
     });
     var up=ks.map(function(k){return xs[k]+","+y(HI[k])}).join(" ");
     var dn=ks.slice().reverse().map(function(k){return xs[k]+","+y(LO[k])}).join(" ");
-    o+='<polygon points="'+up+" "+dn+'" fill="rgba(196,241,53,.6)"/>';
-    o+='<polyline points="'+ks.map(function(k){return xs[k]+","+y(PCT[k])}).join(" ")+'" fill="none" stroke="#101410" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+    o+='<polygon class="band" points="'+up+" "+dn+'" fill="rgba(196,241,53,.6)"/>';
+    o+='<polyline class="line" pathLength="1" points="'+ks.map(function(k){return xs[k]+","+y(PCT[k])}).join(" ")+'" fill="none" stroke="#101410" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
     ks.forEach(function(k){
       var best=k===bestMin;
       o+='<circle cx="'+xs[k]+'" cy="'+y(PCT[k])+'" r="'+(best?7:4)+'" fill="'+(best?'#C4F135':'#101410')+'" stroke="#101410" stroke-width="'+(best?3:0)+'"/>';
@@ -358,7 +366,7 @@ export default function App() {
     // ring = chance at the advised wait (Wait X min), else the 30-min headline chance
     var hw=r.decision==="wait"?r.horizon.filter(function(h){return h.minutes===r.wait_minutes})[0]:null;
     PDROP=hw?hw.p_drop10:r.wait_odds.p_save10;
-    var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="drop ≥10%<br>in "+(hw?r.wait_minutes:30)+" min";
+    var lbl=$("pDropLbl");if(lbl)lbl.innerHTML="chance 10%+<br>cheaper in "+(hw?r.wait_minutes:30)+"m";
     bestMin=r.decision==="wait"?r.wait_minutes:0;
   }
   function requestModel(){
@@ -367,31 +375,27 @@ export default function App() {
       .then(function(r){if(r!==MODEL){MODEL=r;MODEL_ERR=null;applyModel(r);remaining=bestMin*60;tick();renderPrediction(true)}MODEL_ROUTE=rk;showRouteStats();aiReset();if(EARN_PENDING){EARN_PENDING=false;awardForecast()}})
       .catch(function(e){MODEL=null;MODEL_ERR=String(e);renderPrediction(true)});
   }
+  // "Why" in three short lines, built from fields this forecast already shows (ring, chart, events): no new numbers
+  function renderWhyLines(I){
+    var o=MODEL.wait_odds,us=Math.round(o.typical_p_save10*100),L=[],wait=MODEL.decision==="wait";
+    var h=wait?MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0]:null;
+    var line=function(icon,html){return '<div class="wl"><span class="wi">'+ic(I[icon])+'</span><p>'+html+'</p></div>'};
+    if(wait)L.push(line("clock","<b>"+Math.round(h.p_drop10*100)+"%</b> chance it's 10%+ cheaper by "+hhmm(MODEL.wait_minutes)+" (usually "+us+"%)"));
+    else L.push(line("clock","Only <b>"+Math.round(o.p_save10*100)+"%</b> chance it's 10%+ cheaper in 30 min (usually "+us+"%)"));
+    if(MODEL.traffic&&MODEL.traffic.jam_ahead)L.push(line("car","Traffic jam coming: the trip gets slower later"));
+    else if(wait)L.push(line("tag","Expected to ease off by "+hhmm(MODEL.wait_minutes)));
+    else L.push(line("tag",o.pct_high<0?"Likely lower in 30 min, but not by much":o.pct_low>0?"Likely higher in 30 min":"In 30 min it could go either way"));
+    var e=(MODEL.events||[])[0];
+    if(e)L.push(line("cal",esc(e.level==="right_here"?"Event right here":"Event nearby")+": "+esc(e.name)+
+      '. Effect on prices here not measured. <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a>'));
+    $("whyLines").innerHTML=L.join("");
+    $("wt").textContent=wait?"Why wait":"Why book now";
+  }
   function realOnly(){
-    if(!MODEL){$("why").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
-    // reasons → short icon rows; the odds and "Wait" reasons are already on the decision card
+    if(!MODEL){$("whyLines").innerHTML='<div class="empty">'+esc(MODEL_ERR?"Model offline: start the API (scripts/run_demo.sh).":"Asking the model…")+'</div>';return}
     var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',car:'<path d="M5 16v-5l1.7-4.5A2 2 0 0 1 8.6 5h6.8a2 2 0 0 1 1.9 1.5L19 11v5M5 16h14M5 16v2.5M19 16v2.5"/>',
-      rain:'<path d="M7 15a4 4 0 1 1 1.2-7.8A5 5 0 0 1 17.5 9 3.5 3.5 0 0 1 17 16H7z"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/>',
-      tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
-      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>'};
-    function row(icon,title,text,extra){text=text.charAt(0).toUpperCase()+text.slice(1);return '<div class="wr"><span class="wi">'+ic(I[icon])+'</span><div><b>'+esc(title)+'</b><p>'+esc(text)+'</p>'+(extra||"")+'</div></div>'}
-    var html=MODEL.reasons.map(function(t){
-      if(/^Chance that waiting|^Wait \d+ min:|^Event (right here|in the area|today|nearby)/.test(t))return "";
-      if(/^Book now — jam coming|^Traffic/.test(t))return row("car","Traffic",t.replace(/^Traffic: /,""));
-      if(/^Book now/.test(t))return row("clock","Why book now",t.replace(/^Book now: /,""));
-      if(/^Odds of a drop/.test(t))return row("clock","Why book now",t);
-      if(/^Your quote is/.test(t))return row("tag","Your price",t);
-      if(/^Why so pricey\?/.test(t))return row("tag","Why so pricey?",t.replace(/^Why so pricey\? /,""));
-      if(/^No usual price/.test(t))return row("tag","No usual price",t.replace(/^No usual price given: /,"Without it, "));
-      if(t==="rain"||t==="no rain")return "";  // no rain input in the app any more
-      if(/^Event ending right here: /.test(t))return row("cal","Event ending",t.replace(/^Event ending right here: /,""));
-      return row("info","Note",t);
-    }).join("");
-    html+=MODEL.events.map(function(e){
-      var lv=e.level==="right_here"?"Event right here":e.level==="in_area"?"Event in the area":"Event today";
-      return row("cal",lv+(e.km!=null?" · "+e.km.toFixed(1)+" km":""),e.name,'<small><a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a> · effect on price not measured in Malaysia</small>')}).join("");
-    html+='<div class="why-src">Model '+esc(MODEL.model_version)+', tested on real ride data (reports/metrics.md) + your typed prices</div>';
-    $("why").innerHTML=html;
+      tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'};
+    renderWhyLines(I);
     renderFareReport();
   }
   function renderPrediction(fromModel){
@@ -400,14 +404,14 @@ export default function App() {
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
     $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Predicting…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
-    // situation + urgency (API labels on the model outputs; no extra numbers)
-    var SIT={jam_coming:"Jam coming",event_exit:"Event ending nearby",surge:"Surge: ≥1.5× your usual",pricey:"Pricier than usual",rush_hour:"Prices edging up",normal:"Normal moment"};
-    var URG={urgent:"Urgent: book soon",wait:"Worth waiting",no_gain:"No gain from waiting"};
-    $("dChips").innerHTML=MODEL&&MODEL.situation?'<span class="chip sit">'+esc(SIT[MODEL.situation]||"")+'</span><span class="chip urg '+esc(MODEL.urgency)+'">'+esc(URG[MODEL.urgency]||"")+'</span>':"";
-    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
-    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Asking the model…"):decisionText(tung);
+    // one short line under the verdict; the numbers live in the ring, "Your apps" and the chart
+    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Checking your prices…"):
+      MODEL.decision==="wait"?"Likely cheaper at "+hhmm(MODEL.wait_minutes)+".":"Waiting likely won't help.";
+    var da=$("dAct");da.hidden=!MODEL;if(MODEL)da.textContent=MODEL.decision==="wait"?"Back to my prices":"Booked? Log what you paid";
+    var dc=document.querySelector(".decide");dc.classList.toggle("loading",!MODEL&&!MODEL_ERR);
+    var dk=MODEL?MODEL.decision+bestMin:"";if(MODEL&&dk!==LAST_DK){LAST_DK=dk;dc.classList.remove("pop");void dc.offsetWidth;dc.classList.add("pop")}
     $("rt").textContent=bestMin===0?"Your apps now":"Your apps: now vs "+hhmm(bestMin);
-    $("pDrop").textContent=Math.round(PDROP*100)+"%";
+    countTo($("pDrop"),MODEL?Math.round(PDROP*100):null);
     $("ringArc").style.strokeDashoffset=String(263.9*(1-PDROP));
     var rows=state.quotes.filter(function(q){return q.price>0}).map(function(q){return{app:q.app,now:q.price,later:q.price*mult}});
     rows.sort(function(a,b){return a.later-b.later});
@@ -416,27 +420,23 @@ export default function App() {
       return '<div class="rk'+(i===0?' best':'')+'">'+appBadge(r.app,ini)+'<span><b>'+esc(r.app)+'</b><small>'+(i===0?(bestMin===0?"Cheapest now":"Cheapest at "+hhmm(bestMin)):bestMin===0?rm(r.now-rows[0].now)+" more than "+esc(rows[0].app):"Now "+rm(r.now))+'</small></span>'+
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
-    }).join(""):'<div class="empty">Enter at least one price to see your apps ranked.</div>';
+    }).join(""):'<div class="empty">Type at least one price on the home screen to compare your apps here.</div>';
     renderChart();realOnly();aiReset();
   }
-  // Decision in RM for the cheapest app you typed (model % × your price); % only when no price is typed
-  function decisionText(tung){
-    var ID={Grab:"grab",inDrive:"indrive","GV Ride":"gvride"},o=MODEL.wait_odds;
-    var q=state.quotes.filter(function(x){return x.price>0&&ID[x.app]}).sort(function(a,b){return a.price-b.price})[0];
-    var pct=function(v){return Math.abs(Math.round(v*100))+"%"},ch=Math.round(o.p_save10*100),us=Math.round(o.typical_p_save10*100);
-    if(MODEL.decision==="wait"){
-      var h=MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0],m=MODEL.wait_minutes;
-      var cost=(tung||"").match(/(\d+)% of waits cost more/);
-      var odds=Math.round(h.p_drop10*100)+"% chance it gets 10%+ cheaper by then";
-      return (q?"Wait "+m+" min: your "+q.app+" "+rm(q.price)+" is expected around "+rm(q.price*(1+h.pct_change))+
-        " (could be "+rm(q.price*(1+h.pct_low))+" to "+rm(q.price*(1+h.pct_high))+"). ":"Wait "+m+" min: expected "+(h.pct_change<0?pct(h.pct_change)+" cheaper":"about the same")+". ")+
-        odds.charAt(0).toUpperCase()+odds.slice(1)+"."+(cost?" In our tests, "+cost[1]+"% of waits still cost more.":"");
-    }
-    var range=q&&o.rm_range[ID[q.app]],dir=function(v){return pct(v)+(v<0?" cheaper":" pricier")};
-    var span="between "+dir(o.pct_low)+" and "+dir(o.pct_high);
-    return (range?"In 30 min your "+q.app+" "+rm(q.price)+" will likely be "+rm(range[0])+" to "+rm(range[1])+" ("+span+"). ":
-        "In 30 min the price will likely be "+span+". ")+
-      "Chance it gets 10%+ cheaper: "+ch+"% ("+(Math.abs(ch-us)<=2?"about the usual "+us+"%":ch>us?"above the usual "+us+"%":"below the usual "+us+"%")+").";
+  var LAST_DK="";  // last verdict shown, so the card only "pops" when it changes
+  // the verdict's one primary action: wait -> back to the price form to re-check later; book now -> the fare report card
+  $("dAct").onclick=function(){
+    if(MODEL&&MODEL.decision==="wait"){closeRes(true);setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},240);return}
+    var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
+    setTimeout(function(){var a=$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
+  };
+  $("walkMap").onclick=function(){closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
+  function countTo(el,to){  // ring number counts up instead of jumping
+    if(to==null){el.textContent="–";el.dataset.v="";return}
+    var from=parseInt(el.dataset.v||"0",10)||0;el.dataset.v=String(to);
+    if(reduced()||from===to){el.textContent=to+"%";return}
+    var t0=performance.now(),D=700;
+    (function step(t){var k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(from+(to-from)*e)+"%";if(k<1)requestAnimationFrame(step)})(t0);
   }
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
@@ -461,7 +461,11 @@ export default function App() {
     // the home Event radar card was removed; events show on the map chip, the map circles and in "Why"
     var near=nearEvents();
     $("chipText").textContent=near.length?(near[0].km<=HERE_KM?"Event right here · ":"Event in the area · ")+near[0].name:"Events today · "+REAL_EVENTS.length;
+    var es=$("eventSub");if(es)es.textContent=!EVENTS_LOADED?"Checking today's events…":near.length?(near[0].km<=HERE_KM?"Right at your pickup: ":"Near your pickup ("+near[0].km.toFixed(1)+" km): ")+near[0].name:
+      REAL_EVENTS.length?"None near your pickup · "+REAL_EVENTS.length+" in KL today":"No big events listed today";
   }
+  var EV_CLOCK='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  var EV_PIN='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>';
   function renderZoneSheet(){
     // Real events today with sources; no price effect is shown (only validated for NYC baseball)
     var a=pickupLL(),list=REAL_EVENTS.map(function(e){return Object.assign({km:a?kmBetween(a,e):null},e)})
@@ -472,8 +476,10 @@ export default function App() {
     var rows=list.length?list.map(function(e){
       var here=e.km!=null&&e.km<=HERE_KM,area=e.km!=null&&e.km<=NEAR_KM;
       var lvl=here?"Right here (within "+HERE_KM+" km)":area?"In the area (within "+NEAR_KM+" km)":"Further away";
-      return '<div class="zs-status '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span><b>'+esc(e.name)+'</b><br>'+esc(e.venue)+' · '+esc(evWhen(e))+
-        (e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'<br><small>'+lvl+'</small> · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></span></div>';
+      return '<div class="zs-status ev '+(here?'in':'out')+'">'+(here?ICON_WARN:ICON_CHECK)+'<span class="ev-body"><b>'+esc(e.name)+'</b>'+
+        '<span class="ev-meta">'+EV_CLOCK+esc(evWhen(e))+'</span>'+
+        '<span class="ev-meta">'+EV_PIN+esc(e.venue)+(e.km!=null?' · '+e.km.toFixed(1)+' km':'')+'</span>'+
+        '<small>'+lvl+' · <a href="'+esc(e.source_url)+'" target="_blank" rel="noopener">Source</a></small></span></div>';
     }).join(""):'<div class="empty">No real events listed for today.</div>';
     var note='<div class="zs-sec"><p class="sub">The orange '+HERE_KM+' km circle on the map is about the area where our training data saw prices '+
       'rise right after big games. It has not been measured in Malaysia, so no % is shown. '+
@@ -566,16 +572,25 @@ export default function App() {
     var el=$("fareReport");if(!el)return;
     if(!MODEL){FARE_KEY="";el.innerHTML='<div class="empty">Run a forecast first.</div>';return}
     var key=JSON.stringify([state.from,state.to,state.quotes,state.usual,state.rain]);  // one report per forecast input
-    if(key===FARE_KEY)return;  // same forecast: keep what the user is typing
-    FARE_KEY=key;
+    var quoted=Object.keys(APP_NAME).filter(function(a){return MODEL.horizon[0].expected_rm[a]!=null});
+    // redraw only when the forecast or its quoted apps change (a late response can add an app), else keep the typing
+    if(key+quoted.join()===FARE_KEY)return;
+    FARE_KEY=key+quoted.join();
     var done=fareList().filter(function(f){return f.key===key})[0];
     if(done){el.innerHTML=fareThanks(done);return}
-    var quoted=Object.keys(APP_NAME).filter(function(a){return MODEL.horizon[0].expected_rm[a]!=null});
     var apps=quoted.length?quoted:Object.keys(APP_NAME);
-    el.innerHTML='<form class="fare-form" id="fareForm">'+
-      '<label>App<select id="fareApp">'+apps.map(function(a){return '<option value="'+a+'">'+APP_NAME[a]+'</option>'}).join("")+'</select></label>'+
-      '<label>You paid (RM)<input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="e.g. 18.50" required></label>'+
-      '<button class="go" type="submit">Submit fare</button></form>';
+    // same app switch + price-tag field as the home price card; saved in this browser only
+    el.innerHTML='<form class="fare2" id="fareForm" novalidate><input type="hidden" id="fareApp" value="'+apps[0]+'">'+
+      '<div class="qchips" role="group" aria-label="App you booked" style="grid-template-columns:repeat('+apps.length+',minmax(0,1fr))">'+apps.map(function(a,i){
+        return '<button type="button" class="qchip" data-fare-app="'+a+'" aria-pressed="'+(i===0)+'"><span class="qname">'+appLogo(APP_NAME[a])+APP_NAME[a]+'</span></button>'}).join("")+'</div>'+
+      '<label class="qbig" for="farePaid"><span class="qq">Paid on <b id="fareAppName">'+APP_NAME[apps[0]]+'</b></span>'+
+      '<span class="qamt"><span>RM</span><input id="farePaid" type="number" inputmode="decimal" min="1" max="999" step="0.01" placeholder="0.00"></span></label>'+
+      '<button class="go" type="submit">Save fare · +25 pts</button></form>';
+    el.querySelector(".qchips").onclick=function(ev){
+      var b=ev.target.closest("button[data-fare-app]");if(!b)return;
+      el.querySelectorAll("[data-fare-app]").forEach(function(x){x.setAttribute("aria-pressed",String(x===b))});
+      $("fareApp").value=b.dataset.fareApp;$("fareAppName").textContent=APP_NAME[b.dataset.fareApp];$("farePaid").focus({preventScroll:true});
+    };
     $("fareForm").onsubmit=function(ev){
       ev.preventDefault();
       var app=$("fareApp").value,paid=parseFloat($("farePaid").value);
@@ -609,6 +624,7 @@ export default function App() {
     var p=ptsLoad(),got=Math.max(0,Math.min(n,DAY_CAP-p.day.pts));
     if(!got){toast("Daily limit reached ("+DAY_CAP+" pts)");return 0}
     p.total+=got;p.week.pts+=got;p.day.pts+=got;ptsSave(p);ptsShow();
+    var pc=$("ptsChip");pc.classList.remove("bump");void pc.offsetWidth;pc.classList.add("bump");
     toast("+"+got+" pts · "+why+(got<n?" (daily limit)":""));
     if($("lb").classList.contains("on"))renderLb();
     return got;
@@ -673,10 +689,42 @@ export default function App() {
       '<tr><td>Report what you paid</td><td>25 pts, once per forecast</td></tr></tbody></table>'+
       '<p class="sub">Daily limit '+DAY_CAP+' pts. Your points are saved on this phone.</p></section>';
     $("lbBody").innerHTML=toggle+you+'<section class="card">'+podium+list+
-      '<p class="why-src">Example friends — not real users. Friends and sharing are on our roadmap.</p></section>'+how;
+      '<p class="why-src">Example friends — not real users.</p></section>'+how;
+  }
+  /* friends map: tilted 3D map (MapLibre + OpenFreeMap, loaded only when the leaderboard opens).
+     Example friends sit at made-up spots in central KL; "You" sits at the pickup you typed (not stored). */
+  var FRIEND_SPOTS={Aina:[3.1562,101.7128],"Wei Jie":[3.1497,101.7104],Priya:[3.1528,101.7058],
+    Hafiz:[3.1486,101.7066],"Mei Ling":[3.1551,101.7088],Arjun:[3.1506,101.7150]};
+  var FMAP=null,FML=null,FMARK={};
+  function friendMarker(r){
+    var el=document.createElement("div");el.className="fm"+(r.me?" me":"");
+    el.innerHTML=avatar(r,true)+'<b>'+esc(r.name)+'</b><small>'+r.pts+' pts</small>';
+    return el;
+  }
+  function drawFriends(){
+    if(!FMAP)return;
+    var rows=lbRows(LB_VIEW),you=pickupLL();
+    Object.keys(FMARK).forEach(function(k){FMARK[k].remove()});FMARK={};
+    rows.forEach(function(r){
+      // "You" only when your pickup is near the friends (else the map would zoom out of the city)
+      var ll=r.me?(you&&kmBetween(you,{lat:3.152,lon:101.710})<3?[you.lat,you.lon]:null):FRIEND_SPOTS[r.name];if(!ll)return;
+      FMARK[r.name]=new FML.Marker({element:friendMarker(r),anchor:"bottom"}).setLngLat([ll[1],ll[0]]).addTo(FMAP);
+    });
+  }
+  function openFriendsMap(){
+    if(FMAP){drawFriends();FMAP.resize();return}
+    Promise.all([import("maplibre-gl"),import("maplibre-gl/dist/maplibre-gl.css")]).then(function(m){
+      FML=m[0].default||m[0];
+      FMAP=new FML.Map({container:"lbMap",style:"https://tiles.openfreemap.org/styles/liberty",
+        center:[101.7097,3.1528],zoom:14.25,pitch:55,bearing:-20,attributionControl:{compact:true},dragRotate:true});
+      drawFriends();
+      FMAP.once("load",function(){  // keep the map credit behind its (i) button instead of over the avatars
+        var a=document.querySelector("#lbMap .maplibregl-ctrl-attrib");if(a)a.classList.remove("maplibregl-compact-show");
+      });
+    }).catch(function(){$("lbMap").innerHTML='<div class="empty">The map needs an internet connection.</div>'});
   }
   function openLb(){
-    renderLb();$("lb").classList.add("on");$("lb").setAttribute("aria-hidden","false");
+    renderLb();setTimeout(openFriendsMap,60);$("lb").classList.add("on");$("lb").setAttribute("aria-hidden","false");
     setTimeout(function(){$("closeLb").focus({preventScroll:true})},240);
   }
   function closeLb(){
@@ -686,17 +734,16 @@ export default function App() {
   $("closeLb").onclick=function(){closeLb()};
   $("ptsChip").onclick=function(){openLb()};
   $("lbBody").addEventListener("click",function(e){
-    var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();
+    var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();drawFriends();
   });
   ptsShow();
   /* ---------- AI explanation (Claude, checked against this forecast's numbers) ---------- */
   // Runs by itself when the forecast screen shows a result; one call per forecast input (cached), shortly
   // after typing stops. If AI is unavailable or rejected, the Details rows open instead.
   var AI_KEY="",AI_CACHE={},AI_T=null;
-  function aiShow(r){
-    var d=document.querySelector(".why-details");
-    if(r&&r.ai&&r.text){$("aiOut").innerHTML='<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>';if(d)d.open=false}
-    else{$("aiOut").innerHTML='';if(d)d.open=true}
+  function aiShow(r){  // AI text sits under "Read the full explanation"; no AI text, no link (the three lines stand alone)
+    var ok=!!(r&&r.ai&&r.text);$("whyMore").hidden=!ok;
+    $("aiOut").innerHTML=ok?'<p class="ai-text">'+esc(r.text)+'</p><div class="why-src">Written by AI (Claude) from this forecast only — every number checked against it.</div>':'';
   }
   function aiReset(){
     if(!MODEL||!$("res").classList.contains("on"))return;
@@ -704,7 +751,7 @@ export default function App() {
     if(k===AI_KEY)return;
     AI_KEY=k;clearTimeout(AI_T);
     if(AI_CACHE[k]){aiShow(AI_CACHE[k]);return}
-    $("aiOut").innerHTML='<p class="ai-text ai-wait">Explaining this forecast…</p>';
+    $("whyMore").hidden=true;$("aiOut").innerHTML="";
     AI_T=setTimeout(function(){
       explainForecast({from:state.from,fromLatLon:state.fromLatLon,to:state.to,toLatLon:state.toLatLon,quotes:state.quotes,usual:state.usual,rain:state.rain})
         .then(function(r){if(r.ai)AI_CACHE[k]=r;if(k===AI_KEY)aiShow(r)});
@@ -813,11 +860,11 @@ export default function App() {
             <div className="fields">
               <button className="field" id="fFrom" type="button" aria-label="Choose pickup on map">
                 <span className="pin" aria-hidden="true"></span>
-                <span className="txt"><span className="v" id="vFrom"></span></span>
+                <span className="txt"><small>Pickup</small><span className="v" id="vFrom"></span></span>
               </button>
               <button className="field" id="fTo" type="button" aria-label="Choose destination on map">
                 <span className="pin sq" aria-hidden="true"></span>
-                <span className="txt"><span className="v" id="vTo"></span></span>
+                <span className="txt"><small>Drop-off</small><span className="v" id="vTo"></span></span>
               </button>
               <button className="swap" id="swap" type="button" aria-label="Swap pickup and destination">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg>
@@ -835,27 +882,23 @@ export default function App() {
           <div className="card-head">
             <div>
               <h2 id="qt">Enter the prices you see</h2>
-              <p className="sub">Type the price each app shows you right now.</p>
             </div>
           </div>
-          <div id="quotes" className="stack" style={{gap: "8px"}}></div>
-          <p className="note affil">Logos belong to their owners. When Yah? is not connected to or affiliated with Grab, inDrive or GV Ride.</p>
-          <p className="note" id="bidNote" hidden>inDrive is bid-based, so enter your offer or the fare you were given.</p>
-          <label className="usual-box" htmlFor="usual">
-            <span className="usual-top"><b>What do you usually pay for this trip?</b><em>Optional</em></span>
-            <span className="usual-in"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="e.g. 18" /></span>
-            <small>On a normal, quiet day. With it we can tell if today's price is already high, and the advice gets sharper.</small>
+          <div id="quotes" className="qwrap"></div>
+          <button className="usual-toggle" id="usualToggle" type="button" aria-expanded="false" aria-controls="usualBox">+ Add usual price <em>(optional)</em></button>
+          <label className="qbig qsmall" htmlFor="usual" id="usualBox" hidden>
+            <span className="qq">Usual price on a quiet day</span>
+            <span className="qamt"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="0.00" /></span>
           </label>
           <div className="row-actions">
-            <button className="ghost" id="addApp" type="button">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
-            </button>
             <button className="go" id="predict" type="button">
               When Yah?
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
           </div>
+          <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
         </section>
+
 
       </div>
     </main>
@@ -888,6 +931,10 @@ export default function App() {
           <button className="back" id="closeLb" type="button" aria-label="Back to home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
           <div className="res-ttl"><div className="title">Leaderboard</div><div className="hello">Points for sharing prices and fares</div></div>
         </div>
+        <section className="lb-mapcard" aria-label="Friends map (example friends at made-up places)">
+          <div className="lb-map" id="lbMap"></div>
+          <p className="lb-mapnote">Example friends at made-up places. Not real users or locations.</p>
+        </section>
         <div className="stack" id="lbBody"></div>
       </div>
     </div>
@@ -903,16 +950,30 @@ export default function App() {
         
         <section className="decide" aria-live="polite">
           <div>
-            <div className="k">Best move</div>
-            <div className="chips" id="dChips"></div>
+            <div className="k">Option 1</div>
             <div className="big" id="dTitle">Wait 30 min</div>
             <p id="dText"></p>
-            <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>to book</span></div>
+            <button className="dact" id="dAct" type="button" hidden></button>
+            <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>then check again</span></div>
           </div>
           <div className="ring" role="img" aria-label="Chance of a drop of 10 percent or more within 30 minutes">
             <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(16,20,16,.15)" strokeWidth="10"/><circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="#101410" strokeWidth="10" strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="263.9"/></svg>
-            <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">drop ≥10%<br />in 30 min</em></div></div>
+            <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">chance 10%+<br />cheaper in 30m</em></div></div>
           </div>
+        </section>
+
+        <section className="walk" aria-labelledby="walkT">
+          <svg className="walk-art" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="26" cy="32" r="20" fill="rgba(242,107,29,.18)" stroke="#F26B1D" strokeWidth="2" strokeDasharray="4 4"/>
+            <circle cx="26" cy="32" r="4" fill="#F26B1D"/>
+            <path d="M30 32h26M50 26l6 6-6 6" fill="none" stroke="#C4F135" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <div className="walk-txt">
+            <div className="k">Option 2</div>
+            <h2 id="walkT">Walk out of the zone</h2>
+            <p>Busy spot? Walk a few streets away, then check prices again.</p>
+          </div>
+          <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
         </section>
 
         <section className="card" aria-labelledby="rt">
@@ -925,25 +986,23 @@ export default function App() {
         <section className="card" aria-labelledby="ct">
           <div className="card-head">
             <div>
-              <h2 id="ct">Price change over the next hour</h2>
-              <p className="sub">Line is the expected change, shaded area is the likely range.</p>
+              <h2 id="ct">Price over the next hour</h2>
+              <p className="sub">Line: best guess. Band: likely range.</p>
             </div>
           </div>
           <svg className="chart" id="chart" viewBox="0 0 320 150" role="img" aria-label="Forecast of percent price change at 15, 30, 45 and 60 minutes"></svg>
           <div className="legend"><span><i style={{width:"14px",height:"3px",background:"#101410",borderRadius:"2px"}}></i>Expected</span><span><i style={{width:"14px",height:"10px",background:"rgba(196,241,53,.6)",borderRadius:"3px"}}></i>Likely range</span><span><i style={{width:"10px",height:"10px",background:"#C4F135",border:"2px solid #101410",borderRadius:"50%"}}></i>Best time</span></div>
         </section>
 
-        <section className="card" aria-labelledby="wt">
-          <div className="card-head">
-            <div><h2 id="wt">Why</h2><p className="sub">In plain words, from this forecast.</p></div>
-          </div>
-          <div id="aiOut" aria-live="polite"></div>
-          <details className="why-details"><summary>Details</summary><div className="why2" id="why"></div></details>
+        <section className="card why-card" aria-labelledby="wt">
+          <h2 id="wt">Why</h2>
+          <div className="wlines" id="whyLines"></div>
+          <details className="why-more" id="whyMore" hidden><summary>Read the full explanation</summary><div id="aiOut" aria-live="polite"></div></details>
         </section>
 
         <section className="card" aria-labelledby="ft">
           <div className="card-head">
-            <div><h2 id="ft">Booked? Tell us what you paid</h2><p className="sub">Saved on this phone only. Real fares like yours are how the forecast gets checked in Malaysia.</p></div>
+            <div><h2 id="ft">What did you pay?</h2></div>
           </div>
           <div id="fareReport"></div>
         </section>

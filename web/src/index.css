@@ -268,11 +268,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .decide .chip.urg.urgent{background:#F26B1D;color:#fff}
 .decide .chip.urg.wait{background:#101410;color:#C4F135}
 
-/* fare report */
-.fare-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
-.fare-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700}
-.fare-form select,.fare-form input{font:inherit;font-size:15px;padding:10px;border:2px solid #101410;border-radius:12px;background:#fff;min-width:0}
-.fare-form .go{grid-column:1/-1}
 
 /* points chip + leaderboard */
 .top-chips{display:flex;gap:6px;align-items:center}
@@ -304,12 +299,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .top-chips .chip{padding:7px 9px}
 
 /* why rows + 3-way tabs */
-.why2{display:flex;flex-direction:column;gap:12px}
-.why2 .wr{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start}
-.why2 .wi{width:32px;height:32px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--ink)}
-.why2 b{font-size:13px;display:block}
-.why2 p{margin:1px 0 0;font-size:12.5px;line-height:1.4;color:var(--ink);opacity:.8}
-.why2 small{font-size:11px;color:var(--mute)}
 .lb-toggle.three{grid-template-columns:1fr 1fr 1fr;margin-bottom:6px}
 .lb-toggle.three button{font-size:12px}
 
@@ -323,15 +312,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .plist2{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.4}
 #proof .card h2{margin-bottom:4px}
 
-/* usual price box */
-.usual-box{display:flex;flex-direction:column;gap:6px;background:var(--paper);border:1.5px dashed rgba(16,20,16,.3);border-radius:16px;padding:12px;margin-top:4px;cursor:text}
-.usual-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.usual-top b{font-size:13.5px}
-.usual-top em{font-style:normal;font-size:11px;font-weight:800;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
-.usual-in{display:flex;align-items:center;gap:8px;background:var(--white);border:2px solid var(--ink);border-radius:12px;padding:8px 12px}
-.usual-in span{font-weight:800;font-size:13px;color:var(--mute)}
-.usual-in input{border:0;outline:0;background:transparent;font:inherit;font-size:18px;font-weight:800;width:100%;min-width:0}
-.usual-box small{font-size:11.5px;color:var(--mute);line-height:1.35}
 .lb-av{overflow:hidden;padding:0}
 .lb-av svg{width:100%;height:100%;display:block}
 .proof-intro{font-size:14px;font-weight:600;line-height:1.45;margin:0 2px}
@@ -342,11 +322,6 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .ai-btn{width:100%;justify-content:center;gap:8px}
 .ai-text{margin:10px 0 4px;font-size:14px;line-height:1.5;font-weight:500}
 .ai-wait{opacity:.55;font-style:italic}
-.why-details{margin-top:10px}
-.why-details summary{cursor:pointer;font-size:12.5px;font-weight:800;color:var(--mute);list-style:none;padding:6px 0}
-.why-details summary::before{content:'+ '}
-.why-details[open] summary::before{content:'– '}
-.why-details .why2{margin-top:8px}
 
 /* brand */
 .logo{border-radius:12px;background:none;width:40px;height:40px}
@@ -355,3 +330,144 @@ g[data-p]:focus-visible circle:nth-child(2){stroke-width:5}
 .rk .av{position:relative}
 .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#fff;border-radius:50%}
 .note.affil{font-size:10.5px;opacity:.75;margin-top:-2px}
+
+/* ---------- design v2 extras: event radar, other options, action line ---------- */
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;background:var(--white);border:1px solid var(--line);border-radius:18px;padding:12px 14px;text-align:left;width:100%}
+.opt .oi{width:34px;height:34px;border-radius:50%;background:var(--mint);display:grid;place-items:center}
+.opt b{display:block;font-size:14px}
+.opt small{color:var(--mute);font-size:12px}
+button.opt{cursor:pointer;transition:border-color .15s,transform .15s}
+button.opt:hover{border-color:var(--ink)}
+button.opt:active{transform:scale(.98)}
+.decide p.do{margin-top:8px;font-weight:600;background:rgba(16,20,16,.08);border-radius:12px;padding:8px 10px}
+.field{height:50px}
+.field small{font-size:10px;line-height:1.1}
+
+/* ---------- motion (all off under prefers-reduced-motion, see above) ---------- */
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.96)}55%{transform:scale(1.015)}100%{transform:none}}
+@keyframes breathe{50%{opacity:.6}}
+@keyframes drawl{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes bump{40%{transform:scale(1.18)}100%{transform:none}}
+/* home cards rise in on load */
+.scroll .stack>*{animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
+.scroll .stack>*:nth-child(2){animation-delay:.05s}
+.scroll .stack>*:nth-child(3){animation-delay:.1s}
+.scroll .stack>*:nth-child(4){animation-delay:.15s}
+/* forecast, proof and leaderboard cards stagger in each time the screen opens */
+.res.on .res-scroll>.stack>*{animation:rise .45s cubic-bezier(.2,.8,.2,1) both}
+.res.on .res-scroll>.stack>*:nth-child(2){animation-delay:.06s}
+.res.on .res-scroll>.stack>*:nth-child(3){animation-delay:.12s}
+.res.on .res-scroll>.stack>*:nth-child(4){animation-delay:.18s}
+.res.on .res-scroll>.stack>*:nth-child(5){animation-delay:.24s}
+.res.on .res-scroll>.stack>*:nth-child(n+6){animation-delay:.3s}
+.decide.loading{animation:breathe 1.2s ease-in-out infinite}
+.decide.pop{animation:pop .5s cubic-bezier(.2,.8,.2,1)}
+#ringArc{transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)}
+.chart .line{stroke-dasharray:1;animation:drawl .9s ease-out both}
+.chart .band{animation:fadein .6s .2s ease-out both}
+.rk{animation:rise .35s cubic-bezier(.2,.8,.2,1) both}
+.rk:nth-child(2){animation-delay:.06s}
+.rk:nth-child(3){animation-delay:.12s}
+.rk:nth-child(n+4){animation-delay:.18s}
+.chip.pts.bump{animation:bump .45s ease-out}
+.go,.ghost,.event,.x{transition:transform .12s,background .15s,box-shadow .15s}
+.go svg{transition:transform .2s}
+.go:hover svg{transform:translateX(3px)}
+.go:hover{box-shadow:0 6px 16px -8px rgba(16,20,16,.55)}
+.event:hover{transform:translateY(-1px)}
+.event:active,.ghost:active{transform:scale(.98)}
+.amt input,.sel select{transition:border-color .15s,box-shadow .15s}
+.amt input:focus,.sel select:focus{border-color:var(--ink);box-shadow:0 0 0 4px rgba(196,241,53,.55)}
+.qrow{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
+
+/* ---------- Mobbin patterns (Oct 10): inline field helper (Affirm/Klarna), one primary action in the verdict (Deel), icon-led event meta (Luma) ---------- */
+.qfield{display:flex;flex-direction:column;gap:4px}
+.qhelp{margin:0 4px;font-size:11.5px;color:var(--mute);line-height:1.3}
+.dact{margin-top:10px;width:100%;height:44px;border-radius:999px;background:var(--ink);color:var(--lime);font-weight:800;font-size:14px;transition:transform .12s,box-shadow .15s}
+.dact:hover{box-shadow:0 6px 16px -8px rgba(16,20,16,.55)}
+.dact:active{transform:scale(.98)}
+.dact:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.zs-status.ev{align-items:flex-start}
+.zs-status.ev>svg{margin-top:2px}
+.ev-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.ev-meta{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;font-weight:600}
+.ev-meta svg{flex:none;opacity:.75;margin-top:2px}
+.ev-body small{font-size:11.5px;font-weight:600;opacity:.85}
+
+/* ---------- home price entry: one segmented app switch + the fare written on a rule, price-tag style (Oct 10) ---------- */
+.qwrap{display:flex;flex-direction:column;gap:14px}
+.qchips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:3px}
+.qchip{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40px;padding:3px 2px;border-radius:11px;font-weight:700;font-size:12.5px;line-height:1.2;white-space:nowrap;color:var(--mute);transition:background .15s,color .15s}
+.qchip span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.qchip em{font-style:normal;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
+.qchip em:empty{display:none}
+.qchip:hover{color:var(--ink)}
+.qchip[aria-pressed="true"]{background:var(--ink);color:var(--lime)}
+.qchip[aria-pressed="true"] em{color:var(--white)}
+.qbig{display:flex;flex-direction:column;gap:2px;cursor:text}
+.qq{font-size:13.5px;font-weight:600;color:var(--mute)}
+.qq b{color:var(--ink);font-weight:800}
+.qamt{display:flex;align-items:flex-start;gap:4px;border-bottom:2px solid var(--ink);padding-bottom:2px;transition:border-color .15s}
+.qamt span{font-size:17px;font-weight:800;color:var(--ink);margin-top:10px;letter-spacing:.02em}
+.qamt input{flex:1;width:auto;min-width:0;border:0;outline:0;background:transparent;font-size:52px;font-weight:800;letter-spacing:-.035em;line-height:1.05;font-variant-numeric:tabular-nums lining-nums;caret-color:var(--lime-deep);-moz-appearance:textfield;padding:0}
+.qamt input::-webkit-outer-spin-button,.qamt input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.qamt input::placeholder{color:var(--line)}
+.qbig:focus-within .qamt{border-color:var(--lime-deep);box-shadow:0 2px 0 var(--lime-deep)}
+.qwrap .qhelp{margin:-8px 0 0}
+.usual-toggle{align-self:flex-start;margin-left:-10px;font-weight:800;font-size:13px;color:var(--ink);padding:6px 10px;border-radius:999px}
+.usual-toggle em{font-style:normal;color:var(--mute);font-weight:600}
+.usual-toggle:hover{background:var(--mint)}
+.usual-toggle[aria-expanded="true"]{display:none}
+#predict{flex:1}
+
+/* ---------- forecast: option 2 (walk out of the zone) + Why folded away (Oct 10) ---------- */
+.decide p#dText{font-size:14px;font-weight:700}
+.walk{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;background:var(--ink);color:var(--white);border-radius:26px;padding:16px}
+.walk-art{width:64px;height:64px;display:block}
+.walk .k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--lime)}
+.walk h2{margin:2px 0 4px;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.walk p{margin:0;font-size:13px;color:#B9C5B0;font-weight:600;line-height:1.35}
+.walk-btn{grid-column:1/-1;height:44px;border-radius:999px;border:1.5px solid var(--lime);color:var(--lime);font-weight:800;font-size:14px;transition:background .15s,color .15s}
+.walk-btn:hover{background:var(--lime);color:var(--ink)}
+.walk-btn:focus-visible{outline-color:var(--lime)}
+
+/* ---------- leaderboard: friends map (tilted 3D, Snapchat-style avatar bubbles) ---------- */
+.lb-mapcard{margin:0 0 14px}
+.lb-map{height:280px;border-radius:26px;overflow:hidden;border:2px solid var(--ink);background:var(--map-bg)}
+.lb-mapnote{margin:6px 4px 0;font-size:11.5px;color:var(--mute);font-weight:600}
+.fm{display:flex;flex-direction:column;align-items:center;cursor:default}
+.fm .lb-av.big{width:46px;height:46px;border:3px solid var(--white);box-shadow:0 6px 14px -6px rgba(16,20,16,.6)}
+.fm b{margin-top:3px;background:var(--white);color:var(--ink);font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;box-shadow:0 2px 6px -2px rgba(16,20,16,.35)}
+.fm small{font-size:10.5px;font-weight:800;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff}
+.fm.me .lb-av.big{border-color:var(--lime);background:var(--ink)}
+.fm.me b{background:var(--lime)}
+.qchip .qname{display:inline-flex;align-items:center;gap:5px}
+.qlogo{width:18px;height:18px;border-radius:5px;object-fit:cover;background:#fff;flex:none}
+/* usual price: same price-tag-on-a-rule look as the fare, one size down */
+.qsmall .qamt{border-bottom-width:1.5px}
+.qsmall .qamt span{font-size:14px;margin-top:6px}
+.qsmall .qamt input{font-size:30px;-moz-appearance:textfield}
+.qsmall .qamt input::-webkit-outer-spin-button,.qsmall .qamt input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* Why: three short lines + the full explanation folded; fare report reuses the home price field */
+.why-card{gap:10px}
+.wlines{display:flex;flex-direction:column}
+.wl{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--line)}
+.wl:first-child{border-top:0;padding-top:2px}
+.wl .wi{width:30px;height:30px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--ink)}
+.wl p{margin:5px 0 0;font-size:13.5px;font-weight:600;line-height:1.35}
+.wl p b{font-weight:800}
+.wl a{color:var(--ink);font-weight:800}
+/* full explanation: same text column, size and weight as the three lines above (starts after the 30px icon + 10px gap) */
+.why-more{border-top:1px solid var(--line);padding:10px 0 0 40px}
+.why-more summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--ink)}
+.why-more summary::-webkit-details-marker{display:none}
+.why-more summary::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s}
+.why-more[open] summary::after{transform:rotate(45deg) translate(-2px,-2px)}
+.why-more .ai-text{margin:8px 0 6px;font-size:13.5px;font-weight:600;line-height:1.45;max-width:60ch}
+.why-more .why-src{margin:0}
+.fare2{display:flex;flex-direction:column;gap:14px}
+.fare2 .qamt input{font-size:40px}

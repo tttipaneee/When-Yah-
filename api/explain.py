@@ -11,13 +11,13 @@ import re
 from api.forecast import forecast
 from api.schemas import ForecastRequest
 
-MODEL = "claude-sonnet-5-5"  # cheaper than Opus; enough for 3-4 plain sentences (Ravin, 10 Oct)
+MODEL = "claude-sonnet-5-5"  # cheaper than Opus; enough for 2 plain sentences (Ravin, 10 Oct)
 _ENV = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 APP_NAME = {"grab": "Grab", "indrive": "inDrive", "gvride": "GV Ride"}
 
 SYSTEM = (
     "You explain a ride-price forecast to a rider in Kuala Lumpur, in plain, friendly English. "
-    "Write 3 or 4 short sentences, no lists, no headings. Say what to do (wait or book now) and why, "
+    "Write 2 short sentences (under 40 words in total), no lists, no headings. Say what to do (wait or book now) and why, "
     "using ringgit amounts when they are given. "
     "Use only the numbers that appear in the facts, written the same way; never compute, round or invent a number. "
     "Do not mention models, AUC, data sets, cities other than Kuala Lumpur, or how the forecast was made. "
