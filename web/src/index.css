@@ -461,9 +461,13 @@ button.opt:active{transform:scale(.98)}
 .wl p{margin:5px 0 0;font-size:13.5px;font-weight:600;line-height:1.35}
 .wl p b{font-weight:800}
 .wl a{color:var(--ink);font-weight:800}
-.why-more summary{cursor:pointer;list-style:none;font-size:12.5px;font-weight:800;color:var(--mute);padding:4px 0}
+/* full explanation: same text column, size and weight as the three lines above (starts after the 30px icon + 10px gap) */
+.why-more{border-top:1px solid var(--line);padding:10px 0 0 40px}
+.why-more summary{cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:var(--ink)}
 .why-more summary::-webkit-details-marker{display:none}
-.why-more summary::after{content:" ›"}
-.why-more[open] summary::after{content:" ⌄"}
+.why-more summary::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s}
+.why-more[open] summary::after{transform:rotate(45deg) translate(-2px,-2px)}
+.why-more .ai-text{margin:8px 0 6px;font-size:13.5px;font-weight:600;line-height:1.45;max-width:60ch}
+.why-more .why-src{margin:0}
 .fare2{display:flex;flex-direction:column;gap:14px}
 .fare2 .qamt input{font-size:40px}
