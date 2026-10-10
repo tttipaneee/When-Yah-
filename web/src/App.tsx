@@ -276,7 +276,6 @@ export default function App() {
     if(z){e.preventDefault();openZone(z)}
   });
   $("zoneChip").onclick=function(){openZone(this)};
-  $("eventBtn").onclick=function(){openZone(this)};
   $("swap").onclick=function(){var t=state.from;state.from=state.to;state.to=t;syncFields(true)};
 
   // App logo from web/public/apps/<id>.png (or .svg), supplied by the team; initials if the file is missing.
@@ -309,10 +308,6 @@ export default function App() {
   function selectApp(app,focus){
     ACTIVE=app;renderQuotes();
     if(focus){var i=$("qPrice");if(i)i.focus({preventScroll:true})}
-  }
-  function addNextApp(){  // "Compare one more app": jump to the first app without a price
-    var next=APPS.filter(function(a){return !chipPrice(a)})[0];
-    if(next)selectApp(next,true);
   }
   $("quotes").addEventListener("input",function(e){
     var t=e.target;if(t.id!=="qPrice")return;
@@ -408,13 +403,9 @@ export default function App() {
     var mult=1+PCT[bestMin]/100,o=MODEL&&MODEL.wait_odds;
     var cdBox=$("cd")&&$("cd").parentNode;if(cdBox)cdBox.hidden=!(MODEL&&MODEL.decision==="wait");
     $("dTitle").textContent=!MODEL?(MODEL_ERR?"Model offline":"Predicting…"):MODEL.decision==="wait"?"Wait "+bestMin+" min":"Book now";
-    // situation + urgency (API labels on the model outputs; no extra numbers)
-    var SIT={jam_coming:"Jam coming",event_exit:"Event ending nearby",surge:"Surge: ≥1.5× your usual",pricey:"Pricier than usual",rush_hour:"Prices edging up",normal:"Normal moment"};
-    var URG={urgent:"Urgent: book soon",wait:"Worth waiting",no_gain:"No gain from waiting"};
-    $("dChips").innerHTML=MODEL&&MODEL.situation?'<span class="chip sit">'+esc(SIT[MODEL.situation]||"")+'</span><span class="chip urg '+esc(MODEL.urgency)+'">'+esc(URG[MODEL.urgency]||"")+'</span>':"";
-    var tung=MODEL&&MODEL.decision==="wait"?MODEL.reasons.filter(function(t){return t.indexOf("Wait ")===0})[0]:null;
-    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Checking your prices…"):decisionText(tung);
-    $("dDo").innerHTML=MODEL?decisionAction():"";
+    // one short line under the verdict; the numbers live in the ring, "Your apps" and the chart
+    $("dText").textContent=!MODEL?(MODEL_ERR?"Start the API (scripts/run_demo.sh) and try again.":"Checking your prices…"):
+      MODEL.decision==="wait"?"Likely cheaper at "+hhmm(MODEL.wait_minutes)+".":"Waiting likely won't help.";
     var da=$("dAct");da.hidden=!MODEL;if(MODEL)da.textContent=MODEL.decision==="wait"?"Back to my prices":"Booked? Log what you paid";
     var dc=document.querySelector(".decide");dc.classList.toggle("loading",!MODEL&&!MODEL_ERR);
     var dk=MODEL?MODEL.decision+bestMin:"";if(MODEL&&dk!==LAST_DK){LAST_DK=dk;dc.classList.remove("pop");void dc.offsetWidth;dc.classList.add("pop")}
@@ -429,66 +420,22 @@ export default function App() {
         (bestMin===0?'<span class="p"><strong>'+rm(r.now)+'</strong></span></div>':
         '<span class="p"><s>'+rm(r.now)+'</s><strong>'+rm(r.later)+'</strong><em>Save '+rm(r.now-r.later)+'</em></span></div>');
     }).join(""):'<div class="empty">Type at least one price on the home screen to compare your apps here.</div>';
-    renderChart();realOnly();renderOpts();aiReset();
+    renderChart();realOnly();aiReset();
   }
-  // Decision in RM for the cheapest app you typed (model % × your price); % only when no price is typed
-  function decisionText(tung){
-    var ID={Grab:"grab",inDrive:"indrive","GV Ride":"gvride"},o=MODEL.wait_odds;
-    var q=state.quotes.filter(function(x){return x.price>0&&ID[x.app]}).sort(function(a,b){return a.price-b.price})[0];
-    var pct=function(v){return Math.abs(Math.round(v*100))+"%"},ch=Math.round(o.p_save10*100),us=Math.round(o.typical_p_save10*100);
-    if(MODEL.decision==="wait"){
-      var h=MODEL.horizon.filter(function(x){return x.minutes===MODEL.wait_minutes})[0],m=MODEL.wait_minutes;
-      var cost=(tung||"").match(/(\d+)% of waits cost more/);
-      var odds=Math.round(h.p_drop10*100)+"% chance it gets 10%+ cheaper by then";
-      return (q?"Your "+q.app+" "+rm(q.price)+" should drop to about "+rm(q.price*(1+h.pct_change))+
-        " (likely "+rm(q.price*(1+h.pct_low))+"–"+rm(q.price*(1+h.pct_high))+"). ":"Expected "+(h.pct_change<0?pct(h.pct_change)+" cheaper":"about the same")+" by then. ")+
-        odds.charAt(0).toUpperCase()+odds.slice(1)+"."+(cost?" In our tests, "+cost[1]+"% of waits still cost more.":"");
-    }
-    var range=q&&o.rm_range[ID[q.app]],dir=function(v){return pct(v)+(v<0?" cheaper":" pricier")};
-    return (range?"Waiting is unlikely to help. In 30 min your "+q.app+" "+rm(q.price)+" will likely be "+rm(range[0])+"–"+rm(range[1])+". ":
-        "Waiting is unlikely to help. In 30 min the price will likely be "+dir(o.pct_low)+" to "+dir(o.pct_high)+". ")+
-      "Chance it's 10%+ cheaper: "+ch+"% (usually "+us+"%).";
-  }
-  // One plain action under the verdict (design: "Check again in 15 min" / book on the cheapest app). No new numbers.
-  var LAST_DK="";
-  function cheapestQuote(){
-    var ID={Grab:"grab",inDrive:"indrive","GV Ride":"gvride"};
-    return state.quotes.filter(function(x){return x.price>0&&ID[x.app]}).sort(function(a,b){return a.price-b.price})[0];
-  }
-  function decisionAction(){
-    var q=cheapestQuote();
-    if(MODEL.decision==="wait")return "<b>Do this:</b> don't book yet. Open your apps again at "+hhmm(MODEL.wait_minutes)+".";
-    var n=state.quotes.filter(function(x){return x.price>0}).length;
-    return "<b>Do this:</b> "+(q?"book on "+esc(q.app)+" now"+(n>1?", it's your cheapest.":"."):"book now on the cheapest app.");
-  }
+  var LAST_DK="";  // last verdict shown, so the card only "pops" when it changes
   // the verdict's one primary action: wait -> back to the price form to re-check later; book now -> the fare report card
   $("dAct").onclick=function(){
     if(MODEL&&MODEL.decision==="wait"){closeRes(true);setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},240);return}
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
     setTimeout(function(){var a=$("fareApp")||$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
+  $("walkMap").onclick=function(){closeRes(true);setTimeout(function(){openFs("from",$("walkMap"),true)},240)};
   function countTo(el,to){  // ring number counts up instead of jumping
     if(to==null){el.textContent="–";el.dataset.v="";return}
     var from=parseInt(el.dataset.v||"0",10)||0;el.dataset.v=String(to);
     if(reduced()||from===to){el.textContent=to+"%";return}
     var t0=performance.now(),D=700;
     (function step(t){var k=Math.min(1,(t-t0)/D),e=1-Math.pow(1-k,3);el.textContent=Math.round(from+(to-from)*e)+"%";if(k<1)requestAnimationFrame(step)})(t0);
-  }
-  // "Other options" (design): actions in words only, from the model's decision and real nearby events.
-  function renderOpts(){
-    var el=$("opts");if(!el)return;
-    if(!MODEL){el.parentNode.hidden=true;return}
-    var I={clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/>',walk:'<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6 3 3v3M9 11l3-3 3 3 3 1M12 8l-2 7"/>',
-      plus:'<path d="M12 5v14M5 12h14"/>',tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>'};
-    var o=[],here=(MODEL.events||[]).filter(function(e){return e.level==="right_here"})[0];
-    if(MODEL.decision==="wait")o.push(['div',I.tag,"Need to leave now?","Book now. You pay what you see, and the price can't go up on you."]);
-    else o.push(['div',I.clock,"Not in a rush?","Check again in 30 min. Chance it's 10%+ cheaper by then: "+Math.round(MODEL.wait_odds.p_save10*100)+"%."]);
-    if(here)o.push(['div',I.walk,"Walk away from the event","Prices next to a venue tend to rise when a big event ends. Walk more than "+HERE_KM+" km away, then check again."]);
-    if(state.quotes.filter(function(x){return x.price>0}).length<3)o.push(['button',I.plus,"Compare one more app","Add another app's price. More prices, better chance of a cheap one."]);
-    el.innerHTML=o.map(function(x){
-      return '<'+x[0]+' class="opt"'+(x[0]==="button"?' type="button" id="optAdd"':'')+'><span class="oi">'+ic(x[1])+'</span><span><b>'+esc(x[2])+'</b><small>'+esc(x[3])+'</small></span></'+x[0]+'>'}).join("");
-    el.parentNode.hidden=false;
-    var b=$("optAdd");if(b)b.onclick=function(){closeRes(true);setTimeout(addNextApp,240)};
   }
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
@@ -732,10 +679,42 @@ export default function App() {
       '<tr><td>Report what you paid</td><td>25 pts, once per forecast</td></tr></tbody></table>'+
       '<p class="sub">Daily limit '+DAY_CAP+' pts. Your points are saved on this phone.</p></section>';
     $("lbBody").innerHTML=toggle+you+'<section class="card">'+podium+list+
-      '<p class="why-src">Example friends — not real users. Friends and sharing are on our roadmap.</p></section>'+how;
+      '<p class="why-src">Example friends — not real users.</p></section>'+how;
+  }
+  /* friends map: tilted 3D map (MapLibre + OpenFreeMap, loaded only when the leaderboard opens).
+     Example friends sit at made-up spots in central KL; "You" sits at the pickup you typed (not stored). */
+  var FRIEND_SPOTS={Aina:[3.1562,101.7128],"Wei Jie":[3.1497,101.7104],Priya:[3.1528,101.7058],
+    Hafiz:[3.1486,101.7066],"Mei Ling":[3.1551,101.7088],Arjun:[3.1506,101.7150]};
+  var FMAP=null,FML=null,FMARK={};
+  function friendMarker(r){
+    var el=document.createElement("div");el.className="fm"+(r.me?" me":"");
+    el.innerHTML=avatar(r,true)+'<b>'+esc(r.name)+'</b><small>'+r.pts+' pts</small>';
+    return el;
+  }
+  function drawFriends(){
+    if(!FMAP)return;
+    var rows=lbRows(LB_VIEW),you=pickupLL();
+    Object.keys(FMARK).forEach(function(k){FMARK[k].remove()});FMARK={};
+    rows.forEach(function(r){
+      // "You" only when your pickup is near the friends (else the map would zoom out of the city)
+      var ll=r.me?(you&&kmBetween(you,{lat:3.152,lon:101.710})<3?[you.lat,you.lon]:null):FRIEND_SPOTS[r.name];if(!ll)return;
+      FMARK[r.name]=new FML.Marker({element:friendMarker(r),anchor:"bottom"}).setLngLat([ll[1],ll[0]]).addTo(FMAP);
+    });
+  }
+  function openFriendsMap(){
+    if(FMAP){drawFriends();FMAP.resize();return}
+    Promise.all([import("maplibre-gl"),import("maplibre-gl/dist/maplibre-gl.css")]).then(function(m){
+      FML=m[0].default||m[0];
+      FMAP=new FML.Map({container:"lbMap",style:"https://tiles.openfreemap.org/styles/liberty",
+        center:[101.7097,3.1528],zoom:14.25,pitch:55,bearing:-20,attributionControl:{compact:true},dragRotate:true});
+      drawFriends();
+      FMAP.once("load",function(){  // keep the map credit behind its (i) button instead of over the avatars
+        var a=document.querySelector("#lbMap .maplibregl-ctrl-attrib");if(a)a.classList.remove("maplibregl-compact-show");
+      });
+    }).catch(function(){$("lbMap").innerHTML='<div class="empty">The map needs an internet connection.</div>'});
   }
   function openLb(){
-    renderLb();$("lb").classList.add("on");$("lb").setAttribute("aria-hidden","false");
+    renderLb();setTimeout(openFriendsMap,60);$("lb").classList.add("on");$("lb").setAttribute("aria-hidden","false");
     setTimeout(function(){$("closeLb").focus({preventScroll:true})},240);
   }
   function closeLb(){
@@ -745,7 +724,7 @@ export default function App() {
   $("closeLb").onclick=function(){closeLb()};
   $("ptsChip").onclick=function(){openLb()};
   $("lbBody").addEventListener("click",function(e){
-    var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();
+    var b=e.target.closest("button[data-view]");if(!b)return;LB_VIEW=b.dataset.view;renderLb();drawFriends();
   });
   ptsShow();
   /* ---------- AI explanation (Claude, checked against this forecast's numbers) ---------- */
@@ -913,13 +892,6 @@ export default function App() {
           <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
         </section>
 
-        <section aria-label="Events near pickup" id="events">
-          <button className="event" type="button" id="eventBtn">
-            <span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg></span>
-            <span><b>Event radar</b><small id="eventSub">Checking today's events…</small></span>
-            <span className="tag">Real events</span>
-          </button>
-        </section>
 
       </div>
     </main>
@@ -952,6 +924,10 @@ export default function App() {
           <button className="back" id="closeLb" type="button" aria-label="Back to home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
           <div className="res-ttl"><div className="title">Leaderboard</div><div className="hello">Points for sharing prices and fares</div></div>
         </div>
+        <section className="lb-mapcard" aria-label="Friends map (example friends at made-up places)">
+          <div className="lb-map" id="lbMap"></div>
+          <p className="lb-mapnote">Example friends at made-up places. Not real users or locations.</p>
+        </section>
         <div className="stack" id="lbBody"></div>
       </div>
     </div>
@@ -967,11 +943,9 @@ export default function App() {
         
         <section className="decide" aria-live="polite">
           <div>
-            <div className="k">Best move</div>
-            <div className="chips" id="dChips"></div>
+            <div className="k">Option 1</div>
             <div className="big" id="dTitle">Wait 30 min</div>
             <p id="dText"></p>
-            <p className="do" id="dDo"></p>
             <button className="dact" id="dAct" type="button" hidden></button>
             <div className="count"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/></svg><span id="cd">30:00</span><span style={{opacity: 0.7}}>then check again</span></div>
           </div>
@@ -979,6 +953,20 @@ export default function App() {
             <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="rgba(16,20,16,.15)" strokeWidth="10"/><circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="#101410" strokeWidth="10" strokeLinecap="round" strokeDasharray="263.9" strokeDashoffset="263.9"/></svg>
             <div className="n"><div><b id="pDrop">–</b><em id="pDropLbl">chance 10%+<br />cheaper in 30m</em></div></div>
           </div>
+        </section>
+
+        <section className="walk" aria-labelledby="walkT">
+          <svg className="walk-art" viewBox="0 0 64 64" aria-hidden="true">
+            <circle cx="26" cy="32" r="20" fill="rgba(242,107,29,.18)" stroke="#F26B1D" strokeWidth="2" strokeDasharray="4 4"/>
+            <circle cx="26" cy="32" r="4" fill="#F26B1D"/>
+            <path d="M30 32h26M50 26l6 6-6 6" fill="none" stroke="#C4F135" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <div className="walk-txt">
+            <div className="k">Option 2</div>
+            <h2 id="walkT">Walk out of the zone</h2>
+            <p>Busy spot? Walk a few streets away, then check prices again.</p>
+          </div>
+          <button className="walk-btn" id="walkMap" type="button">Show me on the map</button>
         </section>
 
         <section className="card" aria-labelledby="rt">
@@ -992,22 +980,18 @@ export default function App() {
           <div className="card-head">
             <div>
               <h2 id="ct">Price over the next hour</h2>
-              <p className="sub">Line: our best guess. Green band: where the price will likely land.</p>
+              <p className="sub">Line: best guess. Band: likely range.</p>
             </div>
           </div>
           <svg className="chart" id="chart" viewBox="0 0 320 150" role="img" aria-label="Forecast of percent price change at 15, 30, 45 and 60 minutes"></svg>
           <div className="legend"><span><i style={{width:"14px",height:"3px",background:"#101410",borderRadius:"2px"}}></i>Expected</span><span><i style={{width:"14px",height:"10px",background:"rgba(196,241,53,.6)",borderRadius:"3px"}}></i>Likely range</span><span><i style={{width:"10px",height:"10px",background:"#C4F135",border:"2px solid #101410",borderRadius:"50%"}}></i>Best time</span></div>
         </section>
 
-        <section aria-label="Other options" hidden><div className="k2" style={{margin: "0 2px 8px"}}>Other options</div><div className="opts" id="opts"></div></section>
-
-        <section className="card" aria-labelledby="wt">
-          <div className="card-head">
-            <div><h2 id="wt">Why</h2><p className="sub">The reasons behind this advice, in plain words.</p></div>
-          </div>
+        <details className="card why-card">
+          <summary><h2 id="wt">Why this advice</h2></summary>
           <div id="aiOut" aria-live="polite"></div>
           <details className="why-details"><summary>Details</summary><div className="why2" id="why"></div></details>
-        </section>
+        </details>
 
         <section className="card" aria-labelledby="ft">
           <div className="card-head">

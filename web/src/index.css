@@ -450,3 +450,31 @@ button.opt:active{transform:scale(.98)}
 .usual-toggle:hover{background:var(--mint)}
 .usual-toggle[aria-expanded="true"]{display:none}
 #predict{flex:1}
+
+/* ---------- forecast: option 2 (walk out of the zone) + Why folded away (Oct 10) ---------- */
+.decide p#dText{font-size:14px;font-weight:700}
+.walk{display:grid;grid-template-columns:64px 1fr;gap:12px;align-items:center;background:var(--ink);color:var(--white);border-radius:26px;padding:16px}
+.walk-art{width:64px;height:64px;display:block}
+.walk .k{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--lime)}
+.walk h2{margin:2px 0 4px;font-size:20px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.walk p{margin:0;font-size:13px;color:#B9C5B0;font-weight:600;line-height:1.35}
+.walk-btn{grid-column:1/-1;height:44px;border-radius:999px;border:1.5px solid var(--lime);color:var(--lime);font-weight:800;font-size:14px;transition:background .15s,color .15s}
+.walk-btn:hover{background:var(--lime);color:var(--ink)}
+.walk-btn:focus-visible{outline-color:var(--lime)}
+.why-card{gap:0}
+.why-card>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+.why-card>summary::-webkit-details-marker{display:none}
+.why-card>summary::after{content:"+";font-size:20px;font-weight:800;line-height:1}
+.why-card[open]>summary::after{content:"–"}
+.why-card[open]>summary{margin-bottom:8px}
+
+/* ---------- leaderboard: friends map (tilted 3D, Snapchat-style avatar bubbles) ---------- */
+.lb-mapcard{margin:0 0 14px}
+.lb-map{height:280px;border-radius:26px;overflow:hidden;border:2px solid var(--ink);background:var(--map-bg)}
+.lb-mapnote{margin:6px 4px 0;font-size:11.5px;color:var(--mute);font-weight:600}
+.fm{display:flex;flex-direction:column;align-items:center;cursor:default}
+.fm .lb-av.big{width:46px;height:46px;border:3px solid var(--white);box-shadow:0 6px 14px -6px rgba(16,20,16,.6)}
+.fm b{margin-top:3px;background:var(--white);color:var(--ink);font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;box-shadow:0 2px 6px -2px rgba(16,20,16,.35)}
+.fm small{font-size:10.5px;font-weight:800;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff}
+.fm.me .lb-av.big{border-color:var(--lime);background:var(--ink)}
+.fm.me b{background:var(--lime)}
