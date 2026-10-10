@@ -287,39 +287,48 @@ export default function App() {
     return '<span class="av">'+esc(ini)+(id?'<img src="/apps/'+id+'.png" alt="" onerror="if(!this.dataset.t){this.dataset.t=1;this.src=\'/apps/'+id+'.svg\'}else{this.remove()}">':'')+'</span>';
   }
 
-  /* ---------- quotes ---------- */  function renderQuotes(){
-    $("quotes").innerHTML=state.quotes.map(function(q,i){
-      var opts=APPS.map(function(a){return '<option'+(a===q.app?' selected':'')+'>'+a+'</option>'}).join("");
-      var ini=q.app==="Other app"?"?":q.app.charAt(0).toUpperCase()+(q.app==="GV Ride"?"V":q.app==="inDrive"?"D":"");
-      var help=q.app==="inDrive"?"Type the fare you offered or were offered.":q.app==="Other app"?"Type the fare that app shows now.":"Type the fare "+esc(q.app)+" shows now.";
-      return '<div class="qfield"><div class="qrow">'+
-        '<div class="sel">'+appBadge(q.app,ini)+'<select id="app'+i+'" data-i="'+i+'" aria-label="E-hailing app '+(i+1)+'">'+opts+'</select>'+
-        '<svg class="car" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#101410" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>'+
-        '<div class="amt"><span>RM</span><input id="price'+i+'" data-i="'+i+'" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00" aria-label="Price shown in '+esc(q.app)+'" aria-describedby="help'+i+'"></div>'+
-        (state.quotes.length>1?'<button class="x" type="button" data-rm="'+i+'" aria-label="Remove '+esc(q.app)+'"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>':'')+
-      '</div><p class="qhelp" id="help'+i+'">'+help+'</p></div>';
-    }).join("");
-    $("addApp").disabled=state.quotes.length>=APPS.length;
+  /* ---------- quotes: one big RM field for the selected app (Affirm-style), app chips above ---------- */
+  var ACTIVE="Grab";
+  function activeQuote(){
+    var q=state.quotes.filter(function(x){return x.app===ACTIVE})[0];
+    if(!q){q={app:ACTIVE,price:0};state.quotes.push(q)}
+    return q;
+  }
+  function chipPrice(app){var q=state.quotes.filter(function(x){return x.app===app})[0];return q&&q.price>0?rm(q.price):""}
+  function renderQuotes(){
+    var q=activeQuote(),name=ACTIVE==="Other app"?"your other app":ACTIVE;
+    var help=ACTIVE==="inDrive"?"Type the fare you offered or were offered.":"";  // the question already says it for other apps
+    $("quotes").innerHTML='<div class="qchips" role="group" aria-label="Choose the app">'+APPS.map(function(app){
+        return '<button type="button" class="qchip" data-app="'+esc(app)+'" aria-pressed="'+(app===ACTIVE)+'">'+
+          '<span>'+esc(app==="Other app"?"Other":app)+'</span><em data-chip="'+esc(app)+'">'+chipPrice(app)+'</em></button>';
+      }).join("")+'</div>'+
+      '<label class="qbig" for="qPrice"><span class="qq">What does <b>'+esc(name)+'</b> show?</span>'+
+      '<span class="qamt"><span>RM</span><input id="qPrice" type="number" inputmode="decimal" min="0" step="0.5" value="'+(q.price||"")+'" placeholder="0.00"'+(help?' aria-describedby="qHelp"':'')+'></span></label>'+
+      (help?'<p class="qhelp" id="qHelp">'+help+'</p>':'');
+    fitAmt($("qPrice"));
+  }
+  function fitAmt(i){if(i)i.style.width=Math.max(3.2,(i.value||i.placeholder).length+.6)+"ch"}  // keeps "RM 28" centred
+  function selectApp(app,focus){
+    ACTIVE=app;renderQuotes();
+    if(focus){var i=$("qPrice");if(i)i.focus({preventScroll:true})}
+  }
+  function addNextApp(){  // "Compare one more app": jump to the first app without a price
+    var next=APPS.filter(function(a){return !chipPrice(a)})[0];
+    if(next)selectApp(next,true);
   }
   $("quotes").addEventListener("input",function(e){
-    var t=e.target;if(t.tagName!=="INPUT")return;
-    var v=parseFloat(t.value);state.quotes[+t.dataset.i].price=isFinite(v)&&v>0?v:0;renderPrediction();
-  });
-  $("quotes").addEventListener("change",function(e){
-    var t=e.target;if(t.tagName!=="SELECT")return;
-    state.quotes[+t.dataset.i].app=t.value;renderQuotes();renderPrediction();
+    var t=e.target;if(t.id!=="qPrice")return;
+    fitAmt(t);var v=parseFloat(t.value);activeQuote().price=isFinite(v)&&v>0?v:0;
+    var em=document.querySelector('[data-chip="'+ACTIVE+'"]');if(em)em.textContent=chipPrice(ACTIVE);
+    renderPrediction();
   });
   $("quotes").addEventListener("click",function(e){
-    var b=e.target.closest("button[data-rm]");if(!b)return;
-    state.quotes.splice(+b.dataset.rm,1);renderQuotes();renderPrediction();
+    var b=e.target.closest("button[data-app]");if(b)selectApp(b.getAttribute("data-app"),true);
   });
   $("usual").addEventListener("input",function(){var v=parseFloat(this.value);state.usual=isFinite(v)&&v>0?v:0;renderPrediction()});
-  $("addApp").onclick=function(){
-    var used=state.quotes.map(function(q){return q.app});
-    var next=APPS.filter(function(a){return used.indexOf(a)<0})[0];
-    if(!next)return;
-    state.quotes.push({app:next,price:0});renderQuotes();renderPrediction();
-    var inp=$("price"+(state.quotes.length-1));if(inp)inp.focus();
+  $("usualToggle").onclick=function(){
+    var box=$("usualBox"),open=box.hidden;box.hidden=!open;this.setAttribute("aria-expanded",String(open));
+    if(open)$("usual").focus({preventScroll:true});
   };
 
   /* ---------- prediction ---------- */
@@ -456,7 +465,7 @@ export default function App() {
   }
   // the verdict's one primary action: wait -> back to the price form to re-check later; book now -> the fare report card
   $("dAct").onclick=function(){
-    if(MODEL&&MODEL.decision==="wait"){closeRes(true);setTimeout(function(){var p=$("price0");if(p)p.focus({preventScroll:false})},240);return}
+    if(MODEL&&MODEL.decision==="wait"){closeRes(true);setTimeout(function(){var p=$("qPrice");if(p)p.focus({preventScroll:false})},240);return}
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
     setTimeout(function(){var a=$("fareApp")||$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
@@ -481,7 +490,7 @@ export default function App() {
     el.innerHTML=o.map(function(x){
       return '<'+x[0]+' class="opt"'+(x[0]==="button"?' type="button" id="optAdd"':'')+'><span class="oi">'+ic(x[1])+'</span><span><b>'+esc(x[2])+'</b><small>'+esc(x[3])+'</small></span></'+x[0]+'>'}).join("");
     el.parentNode.hidden=false;
-    var b=$("optAdd");if(b)b.onclick=function(){closeRes(true);if(!$("addApp").disabled)$("addApp").click()};
+    var b=$("optAdd");if(b)b.onclick=function(){closeRes(true);setTimeout(addNextApp,240)};
   }
   function sg(v){return (v>0?"+":v<0?"\u2212":"")+Math.abs(v)}
   function ic(p){return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>'}
@@ -887,21 +896,19 @@ export default function App() {
           <div className="card-head">
             <div>
               <h2 id="qt">Enter the prices you see</h2>
-              <p className="sub">Open each ride app and type the fare it shows right now.</p>
+              <p className="sub">Pick an app and type the fare it shows. Tap another app to compare.</p>
             </div>
           </div>
-          <div id="quotes" className="stack" style={{gap: "8px"}}></div>
+          <div id="quotes" className="qwrap"></div>
           <p className="note affil">Not connected to Grab, inDrive or GV Ride. Logos belong to their owners.</p>
-          <label className="usual-box" htmlFor="usual">
+          <button className="usual-toggle" id="usualToggle" type="button" aria-expanded="false" aria-controls="usualBox">+ Add usual price <em>(optional)</em></button>
+          <label className="usual-box" htmlFor="usual" id="usualBox" hidden>
             <span className="usual-top"><b>Usual price</b><em>Optional</em></span>
             <span className="usual-in"><span>RM</span><input id="usual" type="number" inputMode="decimal" min="0" step="0.5" placeholder="e.g. 18" /></span>
             <small>What this trip costs on a quiet day. It helps us spot a surge. Not sure? Leave it blank.</small>
           </label>
           <p className="cta-hint">Tap <b>When Yah?</b> and we'll tell you: book now, or wait and pay less.</p>
           <div className="row-actions">
-            <button className="ghost" id="addApp" type="button">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>Add app
-            </button>
             <button className="go" id="predict" type="button">
               When Yah?
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#101410" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>

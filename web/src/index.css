@@ -424,3 +424,28 @@ button.opt:active{transform:scale(.98)}
 .ev-meta{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;font-weight:600}
 .ev-meta svg{flex:none;opacity:.75;margin-top:2px}
 .ev-body small{font-size:11.5px;font-weight:600;opacity:.85}
+
+/* ---------- home price entry, Affirm-style: app chips + one big RM field (Oct 10) ---------- */
+.qwrap{display:flex;flex-direction:column;gap:10px}
+.qchips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.qchip{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:42px;padding:4px 2px;border-radius:14px;background:var(--paper);border:1.5px solid var(--line);font-weight:700;font-size:12.5px;line-height:1.15;white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+.qchip span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.qchip em{font-style:normal;font-family:var(--mono);font-size:10.5px;font-variant-numeric:tabular-nums;opacity:.85}
+.qchip em:empty{display:none}
+.qchip:hover{border-color:var(--ink)}
+.qchip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--lime)}
+.qbig{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--paper);border:1.5px solid var(--line);border-radius:20px;padding:14px 12px 10px;cursor:text;transition:border-color .15s,box-shadow .15s}
+.qbig:focus-within{border-color:var(--ink);box-shadow:0 0 0 4px rgba(196,241,53,.55)}
+.qq{font-size:14px;font-weight:600;color:var(--mute)}
+.qq b{color:var(--ink);font-weight:800}
+.qamt{display:flex;align-items:baseline;justify-content:center;gap:6px;width:100%}
+.qamt span{font-size:22px;font-weight:800;color:var(--mute)}
+.qamt input{width:4.6ch;min-width:0;border:0;outline:0;background:transparent;text-align:left;font-size:46px;font-weight:800;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums;caret-color:var(--lime-deep);-moz-appearance:textfield}
+.qamt input::-webkit-outer-spin-button,.qamt input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.qamt input::placeholder{color:#B9C5B0}
+.qwrap .qhelp{text-align:center;margin:-4px 0 0}
+.usual-toggle{align-self:center;font-weight:800;font-size:13px;color:var(--ink);padding:6px 10px;border-radius:999px}
+.usual-toggle em{font-style:normal;color:var(--mute);font-weight:600}
+.usual-toggle:hover{background:var(--mint)}
+.usual-toggle[aria-expanded="true"]{display:none}
+#predict{flex:1}
