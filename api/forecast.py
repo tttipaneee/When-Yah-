@@ -139,7 +139,7 @@ HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's o
 WALK_OUT_KM = HERE_KM + 0.2  # walk-out point: product choice, a little past the edge of that circle
 JAM_FACTOR = 1.25
 RISE_PCT = 0.015  # "edging up": expected rise at some horizon worth a "book now" note (product threshold)
-MIN_WAIT_RM = 1.50  # product rule (Ravin, 11 Oct): only "Wait" if a 10% drop on the cheapest quote saves >= RM 1.50
+MIN_WAIT_RM = 1.00  # product rule (Ravin, 11 Oct): only "Wait" if the expected saving on the cheapest quote is >= RM 1.00
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
@@ -190,7 +190,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     # never "Wait" next to a flat or rising line; the leakage audit (11 Oct) found 18% of v1 waits had a v2 line >= now)
     falling = v1_pct[best.minutes] < 0 and best.pct_change < 0
     cheapest = min(quotes.values()) if quotes else None
-    too_small = cheapest is not None and 0.10 * cheapest < MIN_WAIT_RM  # no quotes: no RM, rule not applied
+    exp_saving = cheapest * -best.pct_change if cheapest is not None else None  # same as the saving shown
+    too_small = exp_saving is not None and exp_saving < MIN_WAIT_RM  # no quotes: no RM, rule not applied
     wait = bool(gate.get("validated")) and odds_high and falling and not too_small
     # Potential traffic: predicted trip time per departure (TomTom via api/traffic.py, or sent by the app). Not a price input —
     # traffic did not improve price prediction (reports/traffic_experiment.md) — but a longer trip is a real cost:
@@ -272,8 +273,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                        f"({mults[best.minutes]:.1f}x the usual); "
                        f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
     elif odds_high and falling and too_small and gate.get("validated"):
-        reasons.append(f"Book now: even a 10% drop would save only RM {0.10 * cheapest:.2f} on RM {cheapest:.2f} — "
-                       f"under our RM {MIN_WAIT_RM:.2f} minimum to make waiting worth it (product rule)")
+        reasons.append(f"Book now: waiting {best.minutes} min would save only about RM {exp_saving:.2f} on "
+                       f"RM {cheapest:.2f} — under our RM {MIN_WAIT_RM:.2f} minimum to make waiting worth it (product rule)")
     elif odds_high and traffic is not None and traffic.flipped_to_book_now:
         pass  # the traffic reason explains the book-now
     elif odds_high and not falling:
@@ -308,10 +309,12 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
         # shown from 30 min before a published end, for pickups right here
         # (own prefix so the web app, which redraws the "Event right here" rows itself, still shows it)
         to_end = (e.end - req.datetime).total_seconds() / 60 if e.end else None
+        # Option 2 (product choice, Ravin 11 Oct): walk-out card whenever the pickup is right here, any time that day
+        if lvl == "right_here" and walk is None:
+            walk = _walk_out(e, pk, (req.dropoff.lat, req.dropoff.lon) if req.dropoff else None,
+                             to_end is not None and to_end <= 0)
         if eff and lvl == "right_here" and to_end is not None and -45 <= to_end <= 30:
             exit_soon, exit_now = exit_soon or to_end > 0, True
-            if walk is None:
-                walk = _walk_out(e, pk, (req.dropoff.lat, req.dropoff.lon) if req.dropoff else None, to_end <= 0)
             ev_reasons.append(
                 f"Event ending right here: {e.name} " + (f"ends at {e.end:%H:%M}" if to_end > 0 else
                                                          f"ended at {e.end:%H:%M}")

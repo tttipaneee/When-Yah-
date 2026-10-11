@@ -270,17 +270,17 @@ def test_explain_rejects_invented_numbers_and_works_without_key(monkeypatch):
     assert r["ai"] is False and r["text"] is None
 
 
-def test_walk_out_only_in_exit_window_and_points_outside_the_circle():
+def test_walk_out_whenever_right_here_and_points_outside_the_circle():
     from api.events import haversine_km
-    from api.forecast import event_effect, WALK_OUT_KM
+    from api.forecast import WALK_OUT_KM
     zepp = {"lat": 3.1394413, "lon": 101.7091281}  # Eunji concert ends 23:00 on 11 Oct (published end)
     sentral = {"lat": 3.1325847, "lon": 101.6879963}
     near = {**BODY, "datetime": "2026-10-11T22:40:00+08:00", "pickup": zepp, "dropoff": sentral}
     early = client.post("/api/forecast", json={**near, "datetime": "2026-10-11T20:30:00+08:00"}).json()
     late = client.post("/api/forecast", json={**near, "datetime": "2026-10-11T23:50:00+08:00"}).json()
-    assert early["walk_out"] is None and late["walk_out"] is None  # outside -30..+45 min of the end
-    if not event_effect():
-        return
+    assert early["walk_out"] and late["walk_out"]  # shown any time that day while the pickup is right here
+    far = client.post("/api/forecast", json={**near, "pickup": sentral}).json()
+    assert far["walk_out"] is None  # pickup outside the 1 km circle
     w = client.post("/api/forecast", json=near).json()["walk_out"]
     assert w and not w["ended"] and w["radius_km"] == 1.0
     t, c = w["target"], w["center"]
@@ -335,14 +335,13 @@ def test_usual_endpoint_shape(monkeypatch):
         assert abs(d["rm_at_this_time"] - 16.62 * d["time_factor"]) < 0.02  # factor shown rounded to 3 dp
 
 
-def test_no_wait_when_10pct_drop_is_under_rm_1_50():
-    # RM 12 vs usual RM 8 (1.5x, the strongest wait signal): 10% = RM 1.20 < RM 1.50 -> never "wait"
-    d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
-                                           "quotes": [{"app": "grab", "price_rm": 12.0}], "usual_price_rm": 8.0}).json()
-    assert d["decision"] == "book_now" and d["wait_minutes"] == 0
-    big = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
-                                             "quotes": [{"app": "grab", "price_rm": 30.0}], "usual_price_rm": 20.0}).json()
-    if big["decision"] == "book_now":  # same level, RM 30: the RM minimum is not the reason
-        assert not any("RM 1.50 minimum" in r for r in big["reasons"])
-    if d["decision"] == "book_now" and big["decision"] == "wait":
-        assert any("RM 1.50 minimum" in r for r in d["reasons"])
+def test_no_wait_when_expected_saving_is_under_rm_1():
+    # RM 12 vs usual RM 8 (1.5x, the strongest wait signal): a wait needs an expected drop >= 8.3% to save RM 1.00
+    for rm, usual in ((12.0, 8.0), (30.0, 20.0), (60.0, 40.0)):
+        d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
+                                               "quotes": [{"app": "grab", "price_rm": rm}], "usual_price_rm": usual}).json()
+        if d["decision"] == "wait":  # the saving shown is the one the rule checked
+            assert d["expected_saving_rm"]["grab"] >= 1.00
+        for r in d["reasons"]:
+            if "RM 1.00 minimum" in r:  # "... save only about RM 0.28 on RM 28.00 ..."
+                assert float(r.split("about RM ")[1].split()[0]) < 1.00
