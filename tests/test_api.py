@@ -345,3 +345,16 @@ def test_no_wait_when_expected_saving_is_under_rm_2():
         for r in d["reasons"]:
             if "RM 2.00 minimum" in r:  # "... save only about RM 0.28 on RM 28.00 ..."
                 assert float(r.split("about RM ")[1].split()[0]) < 2.00
+
+
+def test_wait_picks_a_later_horizon_that_clears_rm_2():
+    # Sunday 14:10, RM 35 vs usual RM 15: the best-odds horizon saves under RM 2.00, a later one clears it
+    # (product rule, 11 Oct) — the reason must say that choice was not tested on held-out days
+    d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-11T14:10:00+08:00",
+                                           "quotes": [{"app": "grab", "price_rm": 35.0}], "usual_price_rm": 15.0}).json()
+    if d["decision"] == "wait":
+        assert d["expected_saving_rm"]["grab"] >= 2.00
+        h = next(h for h in d["horizon"] if h["minutes"] == d["wait_minutes"])
+        assert h["pct_change"] < 0
+        picked = [r for r in d["reasons"] if "so we picked" in r]
+        assert all("not tested on held-out days" in r for r in picked)

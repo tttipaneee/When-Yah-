@@ -83,7 +83,7 @@ Fill in as they're created; keep them working.
 - `decision` = `wait` only if `reports/decision.json` → `variants[<variant>].validated` (beats book-now on test days,
   CI > 0) **and** the best 15–60 min odds multiple (P(drop≥10%) ÷ usual) is ≥ k (no minimum chance since 11 Oct)
   **and** the expected `pct_change` there is < 0 (product rule, 10 Oct: never
-  "Wait" next to a rising line) **and** the expected saving there on the cheapest quote (quote × −`pct_change`, the saving shown) is ≥ RM 2.00 (product rule, 11 Oct; not applied without quotes); `wait_minutes` = that horizon.
+  "Wait" next to a rising line) **and** the expected saving there on the cheapest quote (quote × −`pct_change`, the saving shown) is ≥ RM 2.00 (product rule, 11 Oct; not applied without quotes); `wait_minutes` = that horizon. If the best-odds horizon fails, the best-odds horizon that passes all checks is used instead (product rule, 11 Oct; e.g. +60 when +45 saves < RM 2) and the Wait reason says this choice was not tested on held-out days.
   A reason starting "Wait" gives the tested saving and how often waiting cost more.
 - `GET /api/route?from_lat&from_lon&to_lat&to_lon[&at]` → `{km, minutes, source}` (nulls without a TomTom key): trip time
   with traffic for leaving now (or a future `at`), one TomTom call cached per minute, so the map shows it before any

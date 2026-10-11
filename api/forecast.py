@@ -183,13 +183,22 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     k = load_bundle().get("wait_k", {}).get(variant)
     base = load_bundle()["base_rate"]
     mults = {m: raw_p[m] / base[m] for m in raw_p}
-    best = max(horizon, key=lambda h: mults[h.minutes])
-    odds_high = k is not None and mults[best.minutes] >= k and raw_p[best.minutes] >= MIN_WAIT_P
-    # product rule (10 Oct, same as ml/train.tunggu): never "Wait" while the expected price there is not below now
-    # v1's line: the rule as validated (reports/decision.json); AND the shown line must fall there too (product rule:
-    # never "Wait" next to a flat or rising line; the leakage audit (11 Oct) found 18% of v1 waits had a v2 line >= now)
-    falling = v1_pct[best.minutes] < 0 and best.pct_change < 0
     cheapest = min(quotes.values()) if quotes else None
+
+    def passes(h):  # odds >= k, both lines falling (product rule, 10 Oct), saving >= RM 2.00 (product rule, 11 Oct)
+        # v1's line: the rule as validated (reports/decision.json); AND the shown line must fall there too (product rule:
+        # never "Wait" next to a flat or rising line; the leakage audit (11 Oct) found 18% of v1 waits had a v2 line >= now)
+        return (k is not None and mults[h.minutes] >= k and raw_p[h.minutes] >= MIN_WAIT_P
+                and v1_pct[h.minutes] < 0 and h.pct_change < 0
+                and (cheapest is None or cheapest * -h.pct_change >= MIN_WAIT_RM))
+    best_odds = max(horizon, key=lambda h: mults[h.minutes])
+    # product rule (Ravin, 11 Oct): if the best-odds horizon fails, wait for the best-odds horizon that passes
+    # all checks (e.g. +60 min clears RM 2.00 when +45 min doesn't) — NOT tested on held-out days, labelled in the reason
+    ok = [h for h in horizon if passes(h)]
+    best = max(ok, key=lambda h: mults[h.minutes]) if ok else best_odds
+    untested_pick = best is not best_odds
+    odds_high = k is not None and mults[best.minutes] >= k and raw_p[best.minutes] >= MIN_WAIT_P
+    falling = v1_pct[best.minutes] < 0 and best.pct_change < 0
     exp_saving = cheapest * -best.pct_change if cheapest is not None else None  # same as the saving shown
     too_small = exp_saving is not None and exp_saving < MIN_WAIT_RM  # no quotes: no RM, rule not applied
     wait = bool(gate.get("validated")) and odds_high and falling and not too_small
@@ -272,7 +281,10 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
               "on average (a simple time-of-day rule saved slightly more overall)")
         reasons.append(f"Wait {best.minutes} min: {best.p_drop10:.0%} chance of a ≥10% drop by then "
                        f"({mults[best.minutes]:.1f}x the usual); "
-                       f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more")
+                       f"{ev}; {(gate['level_ge_1_5'] if surge else gate)['waits_cost_more']:.0%} of waits cost more"
+                       + (f". The best odds were at +{best_odds.minutes} min, but the saving there was under "
+                          f"RM {MIN_WAIT_RM:.2f}, so we picked +{best.minutes} min (product rule; this choice was not "
+                          "tested on held-out days)" if untested_pick else ""))
     elif odds_high and falling and too_small and gate.get("validated"):
         reasons.append(f"Book now: waiting {best.minutes} min would save only about RM {exp_saving:.2f} on "
                        f"RM {cheapest:.2f} — under our RM {MIN_WAIT_RM:.2f} minimum to make waiting worth it (product rule)")

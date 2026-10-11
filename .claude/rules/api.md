@@ -13,7 +13,7 @@ paths:
   level = quote ÷ usual price and use the with-level model, else the no-level model → % change at
   +15/30/45/60 with band → apply to **each typed quote** → expected RM per quoted app → decision.
 - **Decision:** served "Wait" rule = wait for the 15–60 min horizon with the best odds multiple (calibrated
-  P(drop ≥ 10%) ÷ usual chance) if ≥ k and the expected saving on the cheapest quote is ≥ RM 2.00 (product rule), only if `reports/decision.json` marks that variant validated (beats book-now
+  P(drop ≥ 10%) ÷ usual chance) if ≥ k and the expected saving on the cheapest quote is ≥ RM 2.00 (product rule); if that horizon fails, the best-odds horizon that passes all checks (untested product rule, labelled in the reason), only if `reports/decision.json` marks that variant validated (beats book-now
   on test days). Otherwise `book_now`. Always return `reasons` from model outputs, tested stats or event names.
 - **No invented numbers:** no fare tables, no per-app RM without a typed quote, no event uplift unless
   `reports/event_effect.md` is VALIDATED. If the 2× surcharge ceiling is used to clip the band, cite the
