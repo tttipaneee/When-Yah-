@@ -3,8 +3,16 @@ import React, { useEffect } from "react";
 import "./index.css";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, kmBetween, klTime } from "./model";
+import { PLACE_LATLON, fetchEventsToday, fetchMetrics, fetchRouteNow, kmBetween, klTime, presenterAt } from "./model";
 import { runModel, explainForecast } from "./model";
+
+// Phone status bar clock: KL time (or the presenter time from ?at=), refreshed every 15 s
+function StatusClock() {
+  const now = () => { const at = presenterAt(); return at ? at.slice(11, 16) : klTime(new Date().toISOString()); };
+  const [t, setT] = React.useState(now);
+  useEffect(() => { const id = setInterval(() => setT(now()), 15000); return () => clearInterval(id); }, []);
+  return <span>{t}</span>;
+}
 
 export default function App() {
   useEffect(() => {
@@ -883,7 +891,7 @@ export default function App() {
 
   <div className="phone" id="phone">
     <div className="island" aria-hidden="true"></div>
-    <div className="status" aria-hidden="true"><span>9:41</span><span>5G ▮▮▮</span></div>
+    <div className="status" aria-hidden="true"><StatusClock /><span>5G ▮▮▮</span></div>
 
     <main className="scroll" id="scroll">
       <div className="stack">
