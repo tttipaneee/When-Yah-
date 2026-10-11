@@ -63,13 +63,16 @@ export function requestBody(inp: ModelInput) {
 
 let lastKey = ""
 let lastResult: Promise<any> | null = null
+let lastAt = 0
+const REUSE_MS = 60_000 // a tab left open must not keep showing an old answer
 
-/** Calls /api/forecast; identical inputs (ignoring the clock) reuse the previous call. */
+/** Calls /api/forecast; identical inputs within a minute reuse the previous call. */
 export function runModel(inp: ModelInput): Promise<any> {
   const body = requestBody(inp)
   const key = JSON.stringify({ ...body, datetime: body.datetime.slice(0, 16) })
-  if (key === lastKey && lastResult) return lastResult
+  if (key === lastKey && lastResult && Date.now() - lastAt < REUSE_MS) return lastResult
   lastKey = key
+  lastAt = Date.now()
   lastResult = fetch("/api/forecast", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   }).then((r) => {
