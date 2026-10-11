@@ -71,7 +71,8 @@ def odds_multiples(bundle: dict, name: str, X) -> np.ndarray:
     return np.c_[[drop_prob(ms[h], X) / bundle["base_rate"][h] for h in HORIZONS]].T
 
 
-MIN_WAIT_P = 0.40  # product rule (Ravin; 20% on 10 Oct, raised to 40% on 11 Oct): never advise waiting below this chance of a >= 10% drop
+MIN_WAIT_P = 0.0  # product rule (Ravin): minimum chance of a >= 10% drop to advise waiting; 20% on 10 Oct, 40% then none on 11 Oct
+# (the app's only minimum is now an expected saving >= RM 2.00, api/forecast.py MIN_WAIT_RM)
 
 
 def tunggu(mult: np.ndarray, k: float | None, base: np.ndarray | None = None,

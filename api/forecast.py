@@ -177,7 +177,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     outlook = Outlook(minutes=30, pct_change=h30.pct_change, pct_low=h30.pct_low, pct_high=h30.pct_high,
                       because=because, model=line_model)
     # "Wait" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
-    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (40%, product rule)
+    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (none since 11 Oct, product rule)
     # — only if that rule beat "book now" on held-out days.
     gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
@@ -292,7 +292,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                            + ("" if traffic is not None else "; it can't see live traffic"))
         else:
             reasons.append(f"Book now: chance of a ≥10% drop is {best.p_drop10:.0%} at best (+{best.minutes} min), "
-                           f"under our {MIN_WAIT_P:.0%} minimum to advise waiting")
+                           + (f"under our {MIN_WAIT_P:.0%} minimum to advise waiting" if MIN_WAIT_P
+                              else f"not above the usual {base[best.minutes]:.0%}"))
     if traffic_reason:
         reasons.append(traffic_reason)
     reasons.append("rain" if req.rain else "no rain")

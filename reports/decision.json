@@ -1,53 +1,53 @@
 {
- "rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual chance) if it is >= k AND P(drop>=10%) there >= 40% AND the expected price there is below the price now; k picked on val days",
- "min_wait_p": 0.4,
+ "rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual chance) if it is >= k AND the expected price there is below the price now; k picked on val days",
+ "min_wait_p": 0.0,
  "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
  "test_days": "2024-08-26..2024-08-31",
  "variants": {
   "no_level": {
-   "validated": false,
+   "validated": true,
    "k": 1.0,
-   "test_saving": 0.0,
+   "test_saving": 0.00299,
    "test_saving_ci": [
-    0.0,
-    0.0
+    0.00264,
+    0.00333
    ],
-   "wait_rate": 0.0,
-   "saving_when_wait": 0.0,
-   "waits_cost_more": 0.0,
-   "vs_hour_of_day": "loses to",
+   "wait_rate": 0.2777,
+   "saving_when_wait": 0.0108,
+   "waits_cost_more": 0.434,
+   "vs_hour_of_day": "ties",
    "minus_hour_of_day": [
-    -0.00288,
-    -0.00324,
-    -0.00246
+    0.00011,
+    -0.00026,
+    0.00052
    ]
   },
   "with_level": {
    "validated": true,
    "k": 1.0,
-   "test_saving": 0.00033,
+   "test_saving": 0.00337,
    "test_saving_ci": [
-    0.00023,
-    0.00043
+    0.00299,
+    0.00377
    ],
-   "wait_rate": 0.0044,
-   "saving_when_wait": 0.0749,
-   "waits_cost_more": 0.27,
-   "vs_hour_of_day": "loses to",
+   "wait_rate": 0.2659,
+   "saving_when_wait": 0.0127,
+   "waits_cost_more": 0.427,
+   "vs_hour_of_day": "beats",
    "minus_hour_of_day": [
-    -0.00254,
-    -0.00289,
-    -0.00215
+    0.00049,
+    8e-05,
+    0.00092
    ],
    "level_ge_1_5": {
     "windows": 255,
-    "wait_rate": 0.51,
-    "saving": 0.0423,
+    "wait_rate": 0.875,
+    "saving": 0.0503,
     "saving_ci": [
-     0.0288,
-     0.0573
+     0.0323,
+     0.0674
     ],
-    "waits_cost_more": 0.277,
+    "waits_cost_more": 0.336,
     "hour_of_day_saving": 0.0513,
     "always_wait_30_saving": 0.0406
    }

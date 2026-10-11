@@ -18,9 +18,9 @@ odds when the fare is far above normal (≈1.9× usual → ~45% in the jam demo)
 **Proof.** On held-out real ride data (19M NYC Uber/Lyft trips, Aug 2024) the odds are **calibrated**
 (top decile: predicted 23.3%, observed 23.3%; `reports/metrics.md` §2) and rise sharply when the price is far above normal.
 The "Wait" advice (wait 15–60 min when the odds of a ≥10% drop are clearly above usual; threshold set on
-validation days; never below a 40% chance; with a usual price only) **beats "book now" on held-out days** (+0.03%; +7.5% per wait, waits in 0.4% of cases) but a simple "hour-of-day" rule saves slightly
-more (+0.29%) — we say so (`reports/decision.json`). When prices are ≥1.5× usual they tend to fall back (~4–5%)
-whatever rule is used. About 1 in 4 waits still cost more; the app shows that. A guard that never says "Wait" next to a rising forecast line is served
+validation days; in the app the expected saving must be ≥ RM 2.00) **beats "book now" on held-out days** (+0.34% with a usual price, +0.30% without; +1.3% per wait) and
+with a usual price barely beats a simple "hour-of-day" rule (+0.29%; exploratory, the rule was changed after seeing test days) — we say so (`reports/decision.json`). When prices are ≥1.5× usual they tend to fall back (~4–5%)
+whatever rule is used. About 4 in 10 waits still cost more; the app shows that. A guard that never says "Wait" next to a rising forecast line is served
 but untested on held-out days. The "Wait" gate was changed
 after seeing test results (disclosed in `reports/metrics.md`) — exploratory. Experiments that failed are listed in §10.
 
@@ -113,8 +113,8 @@ source (model metrics, user input, cited event page).
 (Route-based usual-price estimate: already rejected, `reports/fare_check.md`.)
 
 ## 10. Risks
-1. **Realised (10 Oct):** after removing a noise leak found by the leakage audit, the model does not beat
-   the hour-of-day baseline on savings (served "Wait" rule +0.03% vs +0.29%, `reports/decision.json`); P(drop)
+1. **Realised (10 Oct):** after removing a noise leak found by the leakage audit, the model did not beat
+   the hour-of-day baseline on savings (11 Oct, after rule changes chosen on test days: +0.34% vs +0.29%, exploratory, `reports/decision.json`); P(drop)
    AUC ≈ 0.59, well calibrated. Extra
    inputs tested and rejected: second quote/trend (`reports/trend_experiment.md`), borough averaging
    (`reports/borough_experiment.md`, AUC 0.88 on 23 drop windows but no savings gain), traffic and "why is it

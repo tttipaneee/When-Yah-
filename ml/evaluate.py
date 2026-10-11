@@ -206,7 +206,7 @@ def main() -> None:
     hour_pol = decide(ha, None)
     hi15 = te.level.to_numpy() >= 1.5
     decision = {"rule": "wait for the 15/30/45/60-min horizon with the best odds multiple (P(drop>=10%) / usual "
-                        f"chance) if it is >= k AND P(drop>=10%) there >= {MIN_WAIT_P:.0%} AND the expected price "
+                        f"chance) if it is >= k{f' AND P(drop>=10%) there >= {MIN_WAIT_P:.0%}' if MIN_WAIT_P else ''} AND the expected price "
                         "there is below the price now; k picked on val days",
                 "min_wait_p": MIN_WAIT_P,
                 "gate": "validated if the test-day mean saving vs book now has a 95% CI above 0",
@@ -237,7 +237,7 @@ def main() -> None:
                 "waits_cost_more": round(float(s15["worse_share_of_waits"]), 3),
                 "hour_of_day_saving": round(float(sh15["saving"]), 4),
                 "always_wait_30_saving": round(float(aw["saving"]), 4)}
-        L += [f"- **\"Wait\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual, chance ≥ {MIN_WAIT_P:.0%} and expected price below now; k picked on val): saving "
+        L += [f"- **\"Wait\" rule, {v}** (best of 15–60 min if odds ≥ {kv}× usual{f', chance ≥ {MIN_WAIT_P:.0%}' if MIN_WAIT_P else ''} and expected price below now; k picked on val): saving "
               f"{pct(r_['saving'])} ({pct(r_['lo'])} … {pct(r_['hi'])}) vs book now → "
               + ("**beats book now: the app may say \"Wait\"**" if ok else "**does not beat book now: the app says book now**")
               + f"; {verdict_hour} the hour-of-day rule ({pct(ho_['saving'])}; paired difference {pct(dm)}, "
@@ -257,11 +257,15 @@ def main() -> None:
           "expected price at that horizon is not below the price now (the app had shown \"Wait\" next to a rising "
           "forecast line); not tuned on test numbers; included in the numbers above. Each change re-used the same "
           "test days (Aug 26–31), so the \"Wait\" numbers are exploratory, not a clean held-out result. (3) 11 Oct 2026: "
-          f"the minimum chance was raised from 20% to {MIN_WAIT_P:.0%} after seeing how 30%/40% minimums scored on these "
-          "same test days (product rule: fewer, stronger \"Wait\" calls).", "",
+          "the minimum chance was raised from 20% to 40% after seeing how 30%/40% minimums scored on these same test days, "
+          f"then set to {MIN_WAIT_P:.0%} (product rule). The app's only other minimum, an expected saving ≥ RM 2.00 on the "
+          "cheapest quote, can't be scored on NYC (USD) data and is not in the numbers above.", "",
           "**k picked on val:** " + ", ".join(f"{v} = {b['wait_k'][v]}" for v in preds)
-          + (f". This is the lowest value tried ({K_GRID[0]}), so the odds-multiple test never blocks a \"Wait\"; "
-             f"the {MIN_WAIT_P:.0%} minimum does the work." if all(b["wait_k"][v] == K_GRID[0] for v in preds) else "."),
+          + ((f". This is the lowest value tried ({K_GRID[0]}), so the odds-multiple test never blocks a \"Wait\"; "
+              f"the {MIN_WAIT_P:.0%} minimum does the work." if MIN_WAIT_P else
+              f". This is the lowest value tried ({K_GRID[0]}): \"Wait\" needs odds at or above the usual chance. k was "
+              "picked with the 20% minimum in place and not re-picked.")
+             if all(b["wait_k"][v] == K_GRID[0] for v in preds) else "."),
           "",
           "**Level in training vs in the app.** In training, level = trip fare ÷ expected fare for its distance and "
           "duration (fit on train days). In the app, level = the user's quote ÷ the usual price they type. Similar in "
