@@ -32,11 +32,15 @@ export interface ModelInput {
 
 // Presenter override: ?at=2026-10-11T22:40 runs the forecast and today's events as if it were that KL time
 // (e.g. to show the event exit window before the event); without it, the real clock is used
+// Demo default (Ravin, 11 Oct): 22:40 on 11 Oct, 20 min before the Zepp KL concert ends; ?at=now uses the real clock
+const DEFAULT_AT = "2026-10-11T22:40"
+
 export function presenterAt(): string | null {
   try {
     const v = new URLSearchParams(window.location.search).get("at")
-    return v && /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v) ? v : null
-  } catch { return null }
+    if (v === "now") return null
+    return v && /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v) ? v : DEFAULT_AT
+  } catch { return DEFAULT_AT }
 }
 
 export function kualaLumpurNowIso(): string {

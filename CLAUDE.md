@@ -126,7 +126,8 @@ Fill in as they're created; keep them working.
   "Make this my pickup" (or tapping that point) moves the pickup there (street name from OSM Nominatim reverse lookup,
   else "Walk-out point"), clears the typed prices (they were for the old spot) and returns to the price field.
 - Presenter time: `?at=YYYY-MM-DDTHH:MM` in the web URL runs the forecast and that day's events at that KL time
-  (e.g. `?at=2026-10-11T22:40` shows Option 2 for the Zepp KL concert ending 23:00).
+  (e.g. `?at=2026-10-11T22:40` shows Option 2 for the Zepp KL concert ending 23:00). Without `?at=` the app defaults
+  to `2026-10-11T22:40` (demo default, 11 Oct); `?at=now` uses the real KL clock.
 - `POST /api/explain` (same body as forecast) → `{ai, text, model?, facts?, reason?}`: Claude (`claude-sonnet-5-5`, effort low, runs automatically as the "Why" text,
   server-side refusal fallback on) explains the server-recomputed forecast from a facts JSON only; any number in the
   answer that is not in the facts → rejected, `ai: false`. Needs `ANTHROPIC_API_KEY` in `.env`; without it `ai: false`.
