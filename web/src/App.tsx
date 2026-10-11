@@ -349,6 +349,9 @@ export default function App() {
   /* ---------- prediction ---------- */
   var bestMin=30;
   function hhmm(min){
+    // KL clock of the forecast (honours ?at= and the browser's timezone): "2026-10-11T22:40:00+08:00" + min
+    var m=MODEL&&/T(\d\d):(\d\d)/.exec(MODEL.datetime||"");
+    if(m){var t=(+m[1]*60+(+m[2])+min)%1440;return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");}
     var d=new Date(Date.now()+min*60000);
     return d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",hour12:false});
   }
