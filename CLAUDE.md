@@ -118,8 +118,8 @@ Fill in as they're created; keep them working.
 - Forecast page: Option 1 = verdict (Wait/Book now, one short line, ring); Option 2 = "Walk out of the zone" card,
   shown only when the forecast returns `walk_out` (else hidden).
 - Forecast `walk_out: {event, venue, source_url, end, ended, center: {lat, lon}, radius_km, target: {lat, lon} | null,
-  walk_km} | null`: only in the event exit window (a `right_here` event with a published `end`, from 30 min before to
-  45 min after it, same rule as the exit hint; needs `reports/event_effect.json` VALIDATED). `target` = a point
+  walk_km} | null`: whenever the pickup is `right_here` (≤ 1 km) of a venue with an event that day, any time
+  (product choice, Ravin 11 Oct; `end`/`ended` null/false when no end is published). `target` = a point
   `HERE_KM + 0.2` km from the venue toward the drop-off (if outside the circle), else away from the venue through the
   pickup, else `null`; `walk_km` = straight line pickup → target. Words + map only, never a price % (the post-event rise
   is validated for NYC baseball only). "Show me on the map" zooms to the circle, pickup and a "Check prices here" point.

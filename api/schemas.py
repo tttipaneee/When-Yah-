@@ -91,12 +91,12 @@ class TrafficInfo(BaseModel):
 
 
 class WalkOut(BaseModel):
-    """Option 2: walk out of the ~1 km zone around an event that is ending. Words and map only, no price %
+    """Option 2: walk out of the ~1 km zone around a venue with an event today (shown whenever the pickup is in it). Words and map only, no price %
     (the post-event rise is validated for NYC baseball only, reports/event_effect.md)."""
     event: str
     venue: str
     source_url: str
-    end: datetime
+    end: datetime | None = None    # null when no source publishes it
     ended: bool                    # true once the published end has passed
     center: LatLon                 # the venue
     radius_km: float               # the "right here" circle (HERE_KM)
@@ -124,7 +124,7 @@ class ForecastResponse(BaseModel):
     # rule-based labels on the outputs above (no new numbers): what kind of moment this is, and how urgent
     situation: Literal["jam_coming", "event_exit", "surge", "pricey", "rush_hour", "normal"] = "normal"
     urgency: Literal["urgent", "wait", "no_gain"] = "no_gain"
-    walk_out: WalkOut | None = None  # only in the event exit window (30 min before to 45 min after a published end)
+    walk_out: WalkOut | None = None  # whenever the pickup is within 1 km of a venue with an event today
     evidence: dict[str, str]
 
 

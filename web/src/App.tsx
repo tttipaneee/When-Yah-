@@ -447,11 +447,11 @@ export default function App() {
     var f=$("ft");if(f)f.scrollIntoView({behavior:reduced()?"auto":"smooth",block:"start"});
     setTimeout(function(){var a=$("farePaid");if(a)a.focus({preventScroll:true})},reduced()?0:400);
   };
-  // Option 2 shows only when the API returns walk_out: an event within 1 km of the pickup, from 30 min before
-  // to 45 min after its published end (the window validated on NYC data; not measured in Malaysia, so no %)
+  // Option 2 shows when the API returns walk_out: an event today within 1 km of the pickup
+  // (not measured in Malaysia, so no %)
   function renderWalk(){
     var w=MODEL&&MODEL.walk_out;$("walkCard").hidden=!w;if(!w)return;
-    $("walkText").textContent=w.event+(w.ended?" ended at ":" ends at ")+klTime(w.end)+" near here. "+
+    $("walkText").textContent=w.event+(w.end?(w.ended?" ended at ":" ends at ")+klTime(w.end):" today")+" near here. "+
       (w.walk_km!=null?"Walk about "+w.walk_km+" km, out of the orange circle":"Walk out of the orange circle ("+w.radius_km+" km around "+w.venue+")")+
       ", then check prices again.";
   }

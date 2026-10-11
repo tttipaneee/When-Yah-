@@ -49,7 +49,7 @@ export interface ForecastResponse {
 }
 /** Option 2, only in the event exit window: walk past the ~1 km circle around the venue (no price %). */
 export interface WalkOut {
-  event: string; venue: string; source_url: string; end: string; ended: boolean
+  event: string; venue: string; source_url: string; end: string | null; ended: boolean
   center: { lat: number; lon: number }; radius_km: number
   target: { lat: number; lon: number } | null; walk_km: number | null
 }
