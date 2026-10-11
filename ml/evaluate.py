@@ -256,7 +256,9 @@ def main() -> None:
           "drop before saying \"Wait\" (product rule; re-scored on the same test days). (2) Never \"Wait\" while the "
           "expected price at that horizon is not below the price now (the app had shown \"Wait\" next to a rising "
           "forecast line); not tuned on test numbers; included in the numbers above. Each change re-used the same "
-          "test days (Aug 26–31), so the \"Wait\" numbers are exploratory, not a clean held-out result.", "",
+          "test days (Aug 26–31), so the \"Wait\" numbers are exploratory, not a clean held-out result. (3) 11 Oct 2026: "
+          f"the minimum chance was raised from 20% to {MIN_WAIT_P:.0%} after seeing how 30%/40% minimums scored on these "
+          "same test days (product rule: fewer, stronger \"Wait\" calls).", "",
           "**k picked on val:** " + ", ".join(f"{v} = {b['wait_k'][v]}" for v in preds)
           + (f". This is the lowest value tried ({K_GRID[0]}), so the odds-multiple test never blocks a \"Wait\"; "
              f"the {MIN_WAIT_P:.0%} minimum does the work." if all(b["wait_k"][v] == K_GRID[0] for v in preds) else "."),

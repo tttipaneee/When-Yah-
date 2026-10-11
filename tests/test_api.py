@@ -335,13 +335,13 @@ def test_usual_endpoint_shape(monkeypatch):
         assert abs(d["rm_at_this_time"] - 16.62 * d["time_factor"]) < 0.02  # factor shown rounded to 3 dp
 
 
-def test_no_wait_when_expected_saving_is_under_rm_1():
-    # RM 12 vs usual RM 8 (1.5x, the strongest wait signal): a wait needs an expected drop >= 8.3% to save RM 1.00
+def test_no_wait_when_expected_saving_is_under_rm_2():
+    # RM 12 vs usual RM 8 (1.5x, the strongest wait signal): a wait needs an expected drop >= 16.7% to save RM 2.00
     for rm, usual in ((12.0, 8.0), (30.0, 20.0), (60.0, 40.0)):
         d = client.post("/api/forecast", json={**BODY, "datetime": "2026-10-09T17:30:00+08:00",
                                                "quotes": [{"app": "grab", "price_rm": rm}], "usual_price_rm": usual}).json()
         if d["decision"] == "wait":  # the saving shown is the one the rule checked
-            assert d["expected_saving_rm"]["grab"] >= 1.00
+            assert d["expected_saving_rm"]["grab"] >= 2.00
         for r in d["reasons"]:
-            if "RM 1.00 minimum" in r:  # "... save only about RM 0.28 on RM 28.00 ..."
-                assert float(r.split("about RM ")[1].split()[0]) < 1.00
+            if "RM 2.00 minimum" in r:  # "... save only about RM 0.28 on RM 28.00 ..."
+                assert float(r.split("about RM ")[1].split()[0]) < 2.00

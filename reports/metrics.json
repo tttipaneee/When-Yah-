@@ -55,23 +55,23 @@
   },
   {
    "name": "When Yah? no_level, odds rule (k=1.0)",
-   "wait_rate": 0.0403,
-   "saving": 0.00064,
+   "wait_rate": 0.0,
+   "saving": 0.0,
    "saving_ci": [
-    0.00049,
-    0.00083
+    0.0,
+    0.0
    ],
-   "waits_cost_more": 0.4152
+   "waits_cost_more": 0.0
   },
   {
    "name": "When Yah? with_level, odds rule (k=1.0)",
-   "wait_rate": 0.088,
-   "saving": 0.00198,
+   "wait_rate": 0.0044,
+   "saving": 0.00033,
    "saving_ci": [
-    0.00169,
-    0.00228
+    0.00023,
+    0.00043
    ],
-   "waits_cost_more": 0.3916
+   "waits_cost_more": 0.2696
   },
   {
    "name": "Oracle (perfect foresight; upper bound incl. measurement noise)",

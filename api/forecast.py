@@ -139,7 +139,7 @@ HERE_KM = 1.0  # "right here": product choice, roughly the size of the venue's o
 WALK_OUT_KM = HERE_KM + 0.2  # walk-out point: product choice, a little past the edge of that circle
 JAM_FACTOR = 1.25
 RISE_PCT = 0.015  # "edging up": expected rise at some horizon worth a "book now" note (product threshold)
-MIN_WAIT_RM = 1.00  # product rule (Ravin, 11 Oct): only "Wait" if the expected saving on the cheapest quote is >= RM 1.00
+MIN_WAIT_RM = 2.00  # product rule (Ravin, 11 Oct): only "Wait" if the expected saving on the cheapest quote is >= RM 2.00
 PER_MIN_FACTOR = 1.10  # product rule: mention Grab's per-minute charge when a later trip is >= 10% (and 3 min) longer  # product rule: a departure >= 25% longer than leaving now counts as "jam coming"
 
 
@@ -163,7 +163,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     nearest = min(nearby, key=lambda e: abs((e.start - req.datetime).total_seconds()), default=None)
     pred, variant, level, because, line_model, v1_pct = _predict(req, quotes, nearest)
 
-    raw_p = {m: vals[3] for m, vals in pred.items()}  # unrounded P(drop) for the 20% minimum (same as ml.train.tunggu)
+    raw_p = {m: vals[3] for m, vals in pred.items()}  # unrounded P(drop) for the MIN_WAIT_P minimum (same as ml.train.tunggu)
     pred = {m: tuple(round(v, 4) for v in vals) for m, vals in pred.items()}
     horizon = [HorizonPoint(minutes=m, pct_change=pc, pct_low=lo, pct_high=hi, p_drop10=round(p, 3),
                             expected_rm={a: round(rm * (1 + pc), 2) for a, rm in quotes.items()})
@@ -177,7 +177,7 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     outlook = Outlook(minutes=30, pct_change=h30.pct_change, pct_low=h30.pct_low, pct_high=h30.pct_high,
                       because=because, model=line_model)
     # "Wait" rule (reports/decision.json): wait for the 15-60 min horizon with the best odds multiple
-    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (20%, product rule)
+    # (P(drop >= 10%) / usual chance) if it is >= k and P(drop >= 10%) there >= MIN_WAIT_P (40%, product rule)
     # — only if that rule beat "book now" on held-out days.
     gate = decision_rule().get("variants", {}).get(variant, {})
     k = load_bundle().get("wait_k", {}).get(variant)
@@ -262,7 +262,8 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
                            "numbers that only the app can see")
     elif variant == "no_level":
         reasons.append("No usual price given: the model can't tell if this price is already high, "
-                       "so it only advises waiting when time-of-day patterns are clear")
+                       "so it doesn't advise waiting (without it the waiting rule did not beat booking now in our tests). "
+                       "Type your usual price for a Wait/Book now call")
     if wait:
         surge = level is not None and level >= 1.5 and gate.get("level_ge_1_5")
         ev = (f"in our tests on real ride data, when prices were ≥ 1.5x normal they usually fell back (waiting saved "
